@@ -209,6 +209,8 @@ page("docs", "Documentation · PolyOS 7", "How to install, use and update PolyOS
                  '<ul><li><b>Voice</b>: say “Hey Vera”, or give it a name of its own (Settings › Vara › Name; “Jarvis” answers to “Hey Jarvis”). '
                  'Speech is recognized on your computer. Ask follow-ups without the name; say “stop” to interrupt. Offered with the Developer edition, '
                  'or install it from Settings › Vara › Voice.</li>'
+                 '<li><b>Its own browser</b>: a real browser window you can watch, where Vara reads pages, clicks, fills in forms and compares, asking before it acts on a page.</li>'
+                 '<li><b>Plans</b>: for bigger jobs Vara writes a checklist and ticks it off as it works, checking each step.</li>'
                  '<li><b>The HUD</b>: a full-screen interface that opens when it hears its name, or with Win+J.</li>'
                  '<li><b>Expert helper</b>: a second model (such as Claude) Vara asks for help with hard code.</li></ul>'),
     ]), icons=("info",))

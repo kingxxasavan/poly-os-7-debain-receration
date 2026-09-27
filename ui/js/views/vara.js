@@ -123,6 +123,11 @@ export default function vara(root) {
     fill(log,
       ...history.map((m) => {
         if (m.role === 'step') return stepCard(m);
+        if (m.role === 'plan') {
+          const done = m.steps.filter((st) => st.status === 'done').length;
+          return h('div.va-plan', h('div.va-plan-head', icon('check'), h('b', 'Plan'), h('small', `${done} of ${m.steps.length}`)),
+            m.steps.map((st) => h('div.va-plan-step', { class: st.status }, h('i'), h('span', st.step))));
+        }
         if (m.role === 'thought') {
           return h('details.va-thought', h('summary', icon('sparkle'), 'Thinking'), h('p', m.content));
         }

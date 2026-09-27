@@ -166,7 +166,10 @@ export function mount(root) {
     fill(knowledge, stat('Memories', k.notes), stat('Preferences', k.preferences), stat('Documents indexed', k.documents),
       stat('Tools', k.tools), stat('Skills', k.skills),
       stat('Voice', data.voice.running ? `“Hey ${data.wake[0].toUpperCase()}${data.wake.slice(1)}”` : 'Off'));
+    const planDone = (data.plan || []).filter((st) => st.status === 'done').length;
     fill(activity, data.pending ? h('div.hud-alert', icon('shield'), h('span', `Needs your OK: ${data.pending.title}`)) : null,
+      data.plan && data.plan.length ? h('div.hud-plan', h('div.hud-plan-head', h('span', 'Plan'), h('b', `${planDone}/${data.plan.length}`)),
+        data.plan.map((st) => h('div.hud-step', h('i', { class: { done: 'ok', in_progress: 'run' }[st.status] || '' }), h('span', st.step)))) : null,
       data.steps.length ? data.steps.slice().reverse().map((st) => h('div.hud-step', h('i', { class: STATUS_DOT[st.status] || '' }), h('span', st.title)))
         : h('p.hud-empty', 'Nothing running. Ask for something.'));
     const when = (t) => new Date(t * 1000).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' });

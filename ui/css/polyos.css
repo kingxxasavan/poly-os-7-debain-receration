@@ -1918,3 +1918,16 @@ body.hud-page { background: transparent; overflow: hidden; }
 @keyframes hud-blink { 50% { opacity: 0.35; } }
 @media (max-width: 1100px) { .hud { grid-template-columns: 1fr; grid-template-areas: "top" "center" "bottom"; } .hud-left, .hud-right { display: none; } }
 @media (prefers-reduced-motion: reduce) { .hud-reactor .spin, .hud-reactor .core, .hud-reactor .core-halo, .hud-bars line { animation: none !important; } }
+
+.va-plan { margin: 4px 0; padding: 10px 14px; border-radius: 16px; background: var(--card-2, rgba(255,255,255,0.05)); border: 1px solid var(--line); display: grid; gap: 6px; }
+.va-plan-head { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.va-plan-head small { margin-left: auto; color: var(--text-2); }
+.va-plan-step { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; color: var(--text-2); }
+.va-plan-step i { flex: none; width: 14px; height: 14px; margin-top: 2px; border-radius: 50%; border: 2px solid var(--line-strong); }
+.va-plan-step.in_progress { color: var(--text); font-weight: 600; }
+.va-plan-step.in_progress i { border-color: var(--accent); border-top-color: transparent; animation: va-spin 0.9s linear infinite; }
+.va-plan-step.done { text-decoration: line-through; opacity: 0.75; }
+.va-plan-step.done i { border-color: var(--accent); background: var(--accent); }
+@keyframes va-spin { to { transform: rotate(360deg); } }
+.hud-plan { margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px dashed rgba(55, 200, 255, 0.2); }
+.hud-plan-head { display: flex; justify-content: space-between; font-size: 11px; letter-spacing: 0.25em; text-transform: uppercase; color: var(--hud); margin-bottom: 2px; }

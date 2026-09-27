@@ -946,7 +946,7 @@ const pages = {
           errorText(err, '');
           try {
             await withAdmin(() => api.post('/api/vara/voice/install', {}),
-              { title: 'Install Vara Voice', text: 'Enter your password to install Vara Voice (about 150 MB).' });
+              { title: 'Install Vara Voice', text: 'Enter your password to install Vara Voice and Vara’s web browser (about 300 MB).' });
           } catch (x) {
             install.disabled = false;
             if (!x.cancelled) errorText(err, x.message);

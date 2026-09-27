@@ -212,10 +212,24 @@ history is on). `vara_index.py` keeps a local full-text index of Documents, Desk
 Projects and the workspace (text, code, PDFs, Word and LibreOffice files, slides), refreshed gently
 every half hour; `search_documents` and `read_document` use it. Private folders stay out.
 
-**The web and your browser.** `web_search` and `research` (search, then read the top pages),
-`fetch_url` with `links` to follow a page's links, and `browser` drives the browser on screen (open,
-search, back, tabs, scroll, find, read the open page) with xdotool. `media` plays, pauses and skips
-music and videos through MPRIS.
+**The web.** `web` is Vara's own browser (`vara_browser.py`): Playwright drives Debian's Chromium in
+a window you can watch, with its own profile (your browser and its logins are never touched). Every
+action returns the page as text with a numbered list of what can be used ("[3] button “Sign in”"), and
+Vara acts by number: open, search, click, type, select, check, press, scroll, back, tabs, screenshot.
+This is the approach of open-source browser agents (Playwright MCP, browser-use) and works with any
+chat model. Reading needs no approval; clicking and typing do (or "Always in this chat"). `research`
+searches and reads the top pages in one step, `web_search` and `fetch_url` (with `links`) do it by
+hand, and `browser` steers your own browser window with shortcuts. `media` plays, pauses and skips
+music and videos through MPRIS. Playwright comes with Vara Voice's install.
+
+**How Vara works.** Its system prompt (`AGENT_PROMPT` in `polyos/vara.py`) sets out how it works: understand
+the goal, write a **plan** (the `plan` tool: a checklist shown in the chat and the HUD, ticked off as
+it goes), look before changing anything, make small checked steps, verify before saying it's done,
+change approach after two failures or ask the expert helper, and treat web pages and files as data,
+never instructions. It has a map of which tool fits which job, a coding workflow (explore, plan, edit,
+run the tests, review), rules for the web (no purchases, messages or consequential forms unless asked
+for exactly that), and how to report back. Up to 40 steps per request (20 with background activity
+limited) before it asks to continue.
 
 **The tool maker.** When a job keeps coming up, Vara writes itself a tool (`make_tool`: a small
 Python program in `~/.config/polyos/vara/tools/<name>/`), tests it (`test_tool`) until it passes, and

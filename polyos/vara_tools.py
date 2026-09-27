@@ -67,6 +67,7 @@ class ToolContext:
     schedule: object = None  # reminders and routines (vara_schedule.Schedule)
     index: object = None  # the documents in the person's folders (vara_index.DocIndex)
     expert: dict | None = None  # the expert helper model (Settings > Vara), for consult_expert
+    plan: Callable[[list], None] | None = None  # shows the plan in the chat (and the HUD)
     cancel: threading.Event = field(default_factory=threading.Event)
     gentle: bool = False  # background activity limited: programs run at low CPU priority
 
@@ -781,6 +782,113 @@ def browser(ctx: ToolContext, args: dict) -> str:
     return fetch_url(ctx, {"url": url})
 
 
+# ---- Vara's own web browser (vara_browser.py, Playwright), for real browsing -------------------------
+
+WEB_ACTIONS = ("open", "search", "snapshot", "click", "type", "select", "check", "press", "scroll", "back", "forward",
+               "reload", "extract", "tabs", "tab", "new_tab", "close_tab", "screenshot", "wait", "close")
+WEB_ACTS = ("click", "type", "select", "check", "press")  # these act on a page (forms, buttons): approval "write"
+
+
+def web_python() -> Path:
+    from .vara_voice import PYTHON
+    return Path(os.environ.get("POLYOS_VARA_PYTHON") or PYTHON)
+
+
+def web_available() -> bool:
+    py = web_python()
+    return py.exists() and any(py.parent.parent.glob("lib/python3*/site-packages/playwright"))
+
+
+class WebBrowser:
+    """The browser process: started on first use, closed after IDLE seconds without a command."""
+
+    IDLE = 600
+
+    def __init__(self):
+        self.proc: subprocess.Popen | None = None
+        self._lock = threading.Lock()
+        self._n = 0
+        self._last = 0.0
+
+    def call(self, cmd: dict, timeout: float = 60) -> str:
+        import select
+        with self._lock:
+            if self.proc is None or self.proc.poll() is not None:
+                env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parent.parent)}
+                self.proc = subprocess.Popen([str(web_python()), "-m", "polyos.vara_browser"], stdin=subprocess.PIPE,
+                                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, env=env,
+                                             start_new_session=True)
+                threading.Thread(target=self._idle_watch, daemon=True).start()
+            self._n += 1
+            self._last = time.monotonic()
+            self.proc.stdin.write(json.dumps({**cmd, "id": self._n}) + "\n")
+            self.proc.stdin.flush()
+            end = time.monotonic() + timeout
+            while time.monotonic() < end:
+                ready, _, _ = select.select([self.proc.stdout], [], [], 0.5)
+                if ready:
+                    line = self.proc.stdout.readline()
+                    if not line:
+                        break
+                    reply = json.loads(line)
+                    if reply.get("id") != self._n:
+                        continue
+                    self._last = time.monotonic()
+                    if "error" in reply:
+                        raise ToolError(f"Browser: {reply['error']}")
+                    return reply.get("result", "")
+            self.proc.kill()
+            self.proc = None
+            raise ToolError("The browser stopped answering and was closed. Try again.")
+
+    def close(self) -> None:
+        with self._lock:
+            if self.proc is not None and self.proc.poll() is None:
+                try:
+                    self.proc.stdin.write(json.dumps({"action": "quit"}) + "\n")
+                    self.proc.stdin.flush()
+                    self.proc.wait(10)
+                except (OSError, subprocess.TimeoutExpired):
+                    self.proc.kill()
+            self.proc = None
+
+    def _idle_watch(self) -> None:
+        while self.proc is not None and self.proc.poll() is None:
+            time.sleep(30)
+            if time.monotonic() - self._last > self.IDLE:
+                self.close()
+                return
+
+
+WEB = WebBrowser()
+
+
+def web(ctx: ToolContext, args: dict) -> str:
+    action = str(args.get("action") or "").strip()
+    if action not in WEB_ACTIONS:
+        raise ToolError(f"action is one of: {', '.join(WEB_ACTIONS)}.")
+    if action == "close":
+        WEB.close()
+        return "Closed the browser."
+    if action in ("click", "type", "select", "check") and args.get("ref") in (None, ""):
+        raise ToolError(f"{action} needs ref: the number of the thing on the page (from the last snapshot).")
+    if action == "open" and not str(args.get("url") or "").strip():
+        raise ToolError("open needs a url.")
+    cmd = {k: args[k] for k in ("url", "query", "ref", "text", "submit", "option", "on", "key", "direction", "index",
+                                "full_page", "seconds") if k in args}
+    return clip(WEB.call({"action": action, **cmd}, timeout=90), 16_000)
+
+
+def _web_title(args: dict) -> str:
+    """For the step card: "Web: open example.com", "Web: click [4]"."""
+    what = args.get("url") or args.get("query") or args.get("text") or (f"[{args['ref']}]" if args.get("ref") is not None else "")
+    return f"Web: {args.get('action', '')} {_short(what, 45)}".strip()
+
+
+def web_risk(args: dict) -> str:
+    return WRITE if args.get("action") in WEB_ACTS else READ
+
+
 # ---- music and videos (MPRIS, through playerctl) ----------------------------------------------------
 
 MEDIA_ACTIONS = ("play", "pause", "play-pause", "next", "previous", "stop", "status")
@@ -824,6 +932,33 @@ def list_scheduled(ctx: ToolContext, args: dict) -> str:
 def cancel_scheduled(ctx: ToolContext, args: dict) -> str:
     from .vara_schedule import describe
     return "Cancelled: " + describe(ctx.schedule.cancel(str(args.get("id") or "").strip()))
+
+
+# ---- the plan: a checklist the person watches --------------------------------------------------------
+
+PLAN_STATES = ("pending", "in_progress", "done")
+
+
+def plan(ctx: ToolContext, args: dict) -> str:
+    steps = args.get("steps")
+    if isinstance(steps, str):
+        try:
+            steps = json.loads(steps)
+        except ValueError:
+            steps = None
+    if not isinstance(steps, list) or not steps or len(steps) > 30:
+        raise ToolError("steps is a list of up to 30 {step, status} items.")
+    clean = []
+    for item in steps:
+        text = " ".join(str((item or {}).get("step") if isinstance(item, dict) else item).split())[:160]
+        status = item.get("status") if isinstance(item, dict) and item.get("status") in PLAN_STATES else "pending"
+        if text:
+            clean.append({"step": text, "status": status})
+    if ctx.plan:
+        ctx.plan(clean)
+    done = sum(1 for s in clean if s["status"] == "done")
+    current = next((s["step"] for s in clean if s["status"] == "in_progress"), None)
+    return f"Plan updated: {done} of {len(clean)} done." + (f" Now: {current}" if current else "")
 
 
 # ---- the tool maker (vara_toolmaker.py) and the expert helper ----------------------------------------
@@ -962,6 +1097,13 @@ def _short(text: str, n: int = 70) -> str:
 
 
 TOOLS: dict[str, Tool] = {t.name: t for t in [
+    Tool("plan", "Plan", "Write or update your plan for a task with more than two or three steps: the whole "
+         "list each time, each step pending, in_progress or done. The person sees it as a checklist.",
+         {"steps": {"type": "array", "description": "The steps, in order",
+                    "items": {"type": "object", "properties": {"step": _p("What to do"),
+                                                               "status": _p("pending, in_progress or done")},
+                              "required": ["step", "status"]}}},
+         ["steps"], READ, plan, lambda a: "Updated the plan", icon="check"),
     Tool("list_files", "List a folder", "List a folder's files and subfolders (with sizes).",
          {"path": _p("Folder; relative paths start in the workspace"), "hidden": _p("Include hidden files", "boolean")},
          [], READ, list_files, lambda a: f"Looked in {a['path'] if a.get('path') not in (None, '', '.', './') else 'the workspace'}", icon="folder"),
@@ -1060,6 +1202,21 @@ TOOLS: dict[str, Tool] = {t.name: t for t in [
          "answers. Returns titles, addresses and snippets; read a result with fetch_url before relying on it.",
          {"query": _p("What to search for")}, ["query"], READ, web_search,
          lambda a: f"Searched the web for “{_short(a.get('query', ''), 40)}”", icon="search"),
+    Tool("web", "Browse the web", "Your own web browser (a real one, in a window the person can watch): read pages, "
+         "click, fill in forms, log in when asked, compare, shop, book. Every action returns the page as text with "
+         "numbered things to use; act by number. Actions: open (url), search (query), snapshot, click (ref), type (ref, "
+         "text, submit), select (ref, option), check (ref, on), press (key, e.g. Enter), scroll (direction up/down), "
+         "back, forward, reload, extract (all the text), tabs, tab (index), new_tab (url), close_tab, screenshot, "
+         "wait (seconds), close. Numbers change when the page changes: use the latest snapshot.",
+         {"action": _p("One of: " + ", ".join(WEB_ACTIONS)), "url": _p("For open / new_tab"), "query": _p("For search"),
+          "ref": _p("The number of the thing on the page", "integer"), "text": _p("For type"),
+          "submit": _p("For type: press Enter after", "boolean"), "option": _p("For select: the option's text"),
+          "on": _p("For check: true or false", "boolean"), "key": _p("For press"), "direction": _p("For scroll: up or down"),
+          "index": _p("For tab", "integer"), "full_page": _p("For screenshot", "boolean"), "seconds": _p("For wait", "number")},
+         ["action"], web_risk, web,
+         _web_title,
+         detail=lambda a: json.dumps({k: v for k, v in a.items() if k != "action"})[:1000],
+         needs=web_available, icon="globe"),
     Tool("browser", "Use the web browser", "Control the web browser on screen: open an address or a search in a "
          "new tab; back, forward, reload, new_tab, close_tab, next_tab, previous_tab, scroll_down, scroll_up, top, "
          "bottom, zoom_in, zoom_out, zoom_reset; find text on the page; current (the page title); read_page (the "

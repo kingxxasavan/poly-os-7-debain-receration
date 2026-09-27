@@ -242,7 +242,7 @@ export function mount(root, store) {
         h('li', h('b', 'It remembers: '), 'what matters to you, plus reminders and routines that run on their own.'),
         h('li', h('b', 'It builds: '), 'code, 3D models and robot projects with you, and asks before changing anything.')),
       h('div.su-options',
-        option('Yes, set up Vara', 'Installs after PolyOS (about 150 MB). Speech is recognized on this computer; it only listens for “Hey Vera”.',
+        option('Yes, set up Vara', 'Installs after PolyOS (about 300 MB, with its own web browser). Speech is recognized on this computer; it only listens for “Hey Vera”.',
           h('span.su-dual', icon('mic')), () => choose(true)),
         option('Not now', 'Vara stays a chat in the dock. Settings › Vara adds the voice any time.',
           h('span.su-dual', icon('chat')), () => choose(false))),

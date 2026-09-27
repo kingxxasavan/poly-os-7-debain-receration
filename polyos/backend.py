@@ -1235,6 +1235,7 @@ class Backend:
             "steps": [{"title": h["title"], "status": h["status"], "icon": h.get("icon")}
                       for h in history if h["role"] == "step"][-6:],
             "you": last_user[:300], "reply": last_reply[:600],
+            "plan": next((h["steps"] for h in reversed(history) if h["role"] == "plan"), []),
             "scheduled": self.vara.schedule.items()[:6],
             "knowledge": {"notes": len(notes), "preferences": sum(1 for n in notes if n.get("kind") == "preference"),
                           "documents": self.vara.index.stats()["files"],

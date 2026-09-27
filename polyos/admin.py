@@ -396,7 +396,9 @@ def reboot() -> None:
 
 # Vara Voice: offline speech recognition (Vosk, a small English model) and a natural voice (Piper),
 # in their own Python environment, plus the tools Vara's browser and media control use.
-VOICE_PACKAGES = ["espeak-ng", "xdotool", "xclip", "playerctl", "pipewire-bin", "python3-venv", "poppler-utils"]
+VOICE_PACKAGES = ["espeak-ng", "xdotool", "xclip", "playerctl", "pipewire-bin", "python3-venv", "poppler-utils",
+                  "chromium"]  # Debian's Chromium (with Debian's security updates) is the browser Vara drives
+BROWSER_PIP = ["playwright>=1.45,<2"]  # vara_browser.py: Vara's own web browser
 VOICE_PIP = ["vosk>=0.3.45,<0.4", "piper-tts>=1.3,<2"]
 VOSK_MODEL_URL = "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
 PIPER_VOICE_URL = "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx"
@@ -418,7 +420,7 @@ def _download(url: str, dest: Path, start: float, span: float, what: str) -> Non
 
 
 def vara_voice(action: str) -> None:
-    """Install (or remove) Vara Voice. Downloads: about 150 MB."""
+    """Install (or remove) Vara Voice and Vara's web browser. Downloads: about 300 MB."""
     import urllib.error
     import zipfile
 
@@ -444,6 +446,10 @@ def vara_voice(action: str) -> None:
                           "--upgrade", *VOICE_PIP], capture_output=True, text=True, timeout=1800)
     if pip.returncode != 0:
         raise AdminError("Vara's speech engine didn't install: " + ((pip.stderr or pip.stdout).strip().splitlines() or ["pip failed"])[-1])
+    web = subprocess.run([str(home / "bin" / "python3"), "-m", "pip", "install", "--quiet", "--disable-pip-version-check",
+                          "--upgrade", *BROWSER_PIP], capture_output=True, text=True, timeout=1800)
+    if web.returncode != 0:  # the voice still works; Vara's web browser waits for the next try
+        emit({"log": "playwright didn't install: " + (web.stderr or web.stdout).strip()[-300:]})
     models = home / "models"
     try:
         if not (voice.VOSK_MODEL / "conf").is_dir():
