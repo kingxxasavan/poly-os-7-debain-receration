@@ -36,7 +36,7 @@ except ValueError:
     gi.require_version("WebKit2", "4.0")
 from gi.repository import Gdk, GdkPixbuf, GdkX11, Gio, GLib, Gtk, WebKit2, Wnck  # noqa: E402
 
-from . import __version__, display, gaming, paths, power, system, theme  # noqa: E402
+from . import __version__, display, gaming, installer, paths, power, system, theme  # noqa: E402
 from .backend import (CAMERA_APP, DISPLAY_NAMES, INSTALL_APP, DOCK_HEIGHT, DOCK_MARGIN, PANEL_HEIGHT, app_hidden, base_apps,
                       supersede_browsers,  # noqa: E402
                       Backend, dock_geometry, panel_margin)
@@ -648,9 +648,10 @@ class DesktopShell(Backend):
         self.popup_closed()
 
     def env(self) -> dict:
-        installer = next((i for i in ("install-debian.desktop", "calamares.desktop") if i in self._infos), None)
+        calamares = next((i for i in ("install-debian.desktop", "calamares.desktop") if i in self._infos), None)
         return {"dev": False, "composited": self.composited, "live": self._live,
-                "installer": installer, "panelHeight": PANEL_HEIGHT, "dockHeight": DOCK_HEIGHT,
+                "dualBoot": installer.install_options()["dualBoot"] if self._live else False,
+                "installer": calamares, "panelHeight": PANEL_HEIGHT, "dockHeight": DOCK_HEIGHT,
                 "dockMargin": DOCK_MARGIN, "version": __version__}
 
     # ==== windows ==========================================================================

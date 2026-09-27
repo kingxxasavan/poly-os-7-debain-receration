@@ -65,11 +65,13 @@ MOCK_BASE = {"google-chrome.desktop", "chromium.desktop", "xfce4-terminal.deskto
 class MockBackend(Backend):
     dev = True
 
-    def __init__(self, settings: Settings, bus: EventBus, live: bool = False, home: Path | None = None):
+    def __init__(self, settings: Settings, bus: EventBus, live: bool = False, home: Path | None = None,
+                 dual_boot: bool = False):
         home = Path(home) if home else paths.ROOT / "build" / "dev-home"
         seed_home(home)
         super().__init__(settings, bus, home=home)
         self.live = live
+        self.dual_boot = dual_boot  # the dual-boot ISO; the public one installs on a whole drive only
         self._lock = threading.Lock()
         apps = list(_APPS)
         if live:
@@ -579,7 +581,7 @@ DP-1 disconnected (normal left inverted right x axis y axis)
                 "uptime": 3 * 3600 + 17 * 60, "hostname": "polyos"}
 
     def env(self):
-        return {"dev": True, "composited": True, "live": self.live,
+        return {"dev": True, "composited": True, "live": self.live, "dualBoot": self.live and self.dual_boot,
                 "installer": "install-debian.desktop" if self.live else None,
                 "panelHeight": PANEL_HEIGHT, "dockHeight": DOCK_HEIGHT,
                 "dockMargin": DOCK_MARGIN, "version": __version__}

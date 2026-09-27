@@ -125,7 +125,7 @@ export function mount(root, store) {
           h('h2', 'It’s time to get started.'),
           h('p', 'Install PolyOS on this computer, or keep exploring first. Nothing is saved until you install.'),
           h('button.choice', { onclick: () => api.post('/api/open', { app: 'setup' }) },
-            h('span.choice-text', h('b', 'Install PolyOS 7'), h('small', 'Start a fresh install or dual boot')),
+            h('span.choice-text', h('b', 'Install PolyOS 7'), h('small', env.dualBoot ? 'Start a fresh install or dual boot' : 'A fresh install on a drive of its own')),
             h('img', { src: '/img/logo-white.svg', alt: '' })),
           h('button.choice.secondary', { onclick: () => api.post('/api/setup/done', {}) },
             h('span.choice-text', h('b', 'Keep exploring'), h('small', 'Try PolyOS from this USB drive')),

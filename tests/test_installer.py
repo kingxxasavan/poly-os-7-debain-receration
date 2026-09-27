@@ -611,3 +611,32 @@ class WindowsAsleepTests(unittest.TestCase):
         text = (P(__file__).resolve().parent.parent / "data/grub-defaults/50-polyos-menu.cfg").read_text()
         self.assertIn("GRUB_TIMEOUT_STYLE=hidden", text)
         self.assertIn("GRUB_DEFAULT=saved", text)
+
+
+class InstallOptionsTests(unittest.TestCase):
+    """The public ISO installs on a whole drive only; the dual-boot ISO offers everything."""
+
+    def write(self, text):
+        import tempfile
+        from pathlib import Path
+        path = Path(tempfile.mkdtemp()) / "install.json"
+        path.write_text(text, "utf-8")
+        return path
+
+    def test_flag_file(self):
+        self.assertEqual(installer.install_options(self.write('{"dualBoot": false}')), {"dualBoot": False})
+        self.assertEqual(installer.install_options(self.write('{"dualBoot": true}')), {"dualBoot": True})
+        # no file (an older ISO, or a development machine) or a broken one: everything, as before
+        self.assertEqual(installer.install_options(self.write("not json")), {"dualBoot": True})
+        from pathlib import Path
+        self.assertEqual(installer.install_options(Path("/nonexistent/install.json")), {"dualBoot": True})
+
+    def test_fresh_only_refuses_other_modes(self):
+        plan = {"mode": "erase", "disk": "/dev/sda", "hostname": "t-polyos", "timezone": "UTC",
+                "user": {"fullName": "T", "username": "tester", "password": "pw"}, "appearance": {"theme": "dark", "accent": "#678fd9"}}
+        with mock.patch.object(installer, "install_options", return_value={"dualBoot": False}):
+            self.assertEqual(installer.validate_plan(plan)["mode"], "erase")
+            for mode in ("alongside", "space", "custom"):
+                with self.assertRaises(InstallError) as err:
+                    installer.validate_plan({**plan, "mode": mode})
+                self.assertIn("whole drive", str(err.exception))

@@ -170,6 +170,16 @@ jobs:
           for arch in amd64 arm64; do
             for f in polyos-*-"$arch".iso; do if [ -e "$f" ]; then mv "$f" "polyos-$arch.iso"; fi; done
           done
+          # The dual-boot installer: the same ISO with dual boot switched on in /polyos/install.json
+          # (on the USB drive, outside the system image, so no second build). The website offers only
+          # polyos-<arch>.iso, which installs PolyOS on a whole drive (a fresh install).
+          if [ -e polyos-amd64.iso ]; then
+            sudo apt-get install -y -q xorriso > /dev/null
+            printf '{"dualBoot": true}\n' > dual.json
+            xorriso -indev polyos-amd64.iso -outdev polyos-amd64-dualboot.iso -boot_image any replay \
+              -map dual.json /polyos/install.json
+            rm dual.json
+          fi
           sha256sum ./*.iso | sed 's#\./##' > SHA256SUMS
           for iso in *.iso; do
             # GitHub takes files under 2 GiB (2147483648 bytes) and serves them as a plain download,
@@ -198,7 +208,7 @@ jobs:
             echo
             echo '| File | For |'
             echo '|---|---|'
-            echo '| `polyos-amd64.iso` | Intel and AMD PCs and laptops (almost every Windows PC) |'
+            echo '| `polyos-amd64.iso` | Intel and AMD PCs and laptops (almost every Windows PC). Installs PolyOS on a whole drive (a fresh install) |'
             echo '| `polyos-arm64.iso` | ARM64: Apple Silicon Macs in UTM, Parallels or VMware Fusion, ARM cloud servers, and ARM64 computers with UEFI firmware (from a USB drive) |'
             echo
             if [ -n "${PARTS:-}" ] && [ -n "${SF_PROJECT:-}" ]; then

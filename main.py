@@ -413,7 +413,7 @@ def cmd_dev(args) -> None:
     settings_path = BUILD / ("dev-settings-live.json" if args.live else "dev-settings.json")
     if args.live:
         settings_path.unlink(missing_ok=True)  # a live USB starts fresh every boot
-    backend = MockBackend(Settings(settings_path), EventBus(), live=args.live)
+    backend = MockBackend(Settings(settings_path), EventBus(), live=args.live, dual_boot=args.dual_boot)
     server = Server(backend, ROOT / "ui", secrets.token_urlsafe(24), dev=True, port=args.port)
     server.start()
     url = f"{server.base_url}/"
@@ -881,6 +881,7 @@ def main() -> None:
     p.add_argument("--port", type=int, default=8790)
     p.add_argument("--no-browser", action="store_true")
     p.add_argument("--live", action="store_true", help="simulate the live USB session (installer card)")
+    p.add_argument("--dual-boot", action="store_true", help="with --live: the dual-boot ISO's installer")
     p.set_defaults(fn=cmd_dev)
     sub.add_parser("test", help="run unit tests").set_defaults(fn=cmd_test)
     sub.add_parser("check", help="static checks").set_defaults(fn=cmd_check)

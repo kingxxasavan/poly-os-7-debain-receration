@@ -74,7 +74,7 @@ jobs:
             rm "$iso".part*
           done
           # the whole ISOs must match what the release says (SHA256SUMS lists them before any parts)
-          grep -E ' polyos-[a-z0-9]+\.iso$' SHA256SUMS > whole.sha256
+          grep -E ' polyos-[a-z0-9-]+\.iso$' SHA256SUMS > whole.sha256
           sha256sum -c whole.sha256
           rm whole.sha256
           ls -lh

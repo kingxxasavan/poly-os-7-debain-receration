@@ -131,7 +131,7 @@ page("download", "Download PolyOS 7", "Download the PolyOS 7 live USB and instal
       <div class="section-head">
         <p class="eyebrow">Download</p>
         <h1 class="page-title">Get PolyOS 7</h1>
-        <p>Free. Try it from a USB drive first, then install it on a whole drive or next to Windows. No account needed.</p>
+        <p>Free. Try it from a USB drive first, then install it on a drive of its own. No account needed.</p>
       </div>
       <div class="download" id="download">
         <img class="dl-logo" src="/assets/logo-white.svg" alt="" width="84" height="84">
@@ -144,13 +144,15 @@ page("download", "Download PolyOS 7", "Download the PolyOS 7 live USB and instal
           </div>
           <p class="dl-which"><b>Which one?</b> Almost every Windows PC and laptop: <b>PC (Intel/AMD)</b>.
             Apple Silicon Macs (in UTM, Parallels or VMware Fusion) and ARM64 computers with UEFI: <b>ARM64</b>.</p>
+          <p class="dl-fresh">{ico("info")}<span><b>A fresh install.</b> PolyOS installs on a whole drive and replaces everything on the drive you choose,
+            including Windows if it's there. Dual boot next to Windows isn't part of this download.</span></p>
           <p class="dl-note" data-release-note>Always the newest release.</p>
           <p class="dl-links"><a href="/download/checksums" data-release-sums>SHA256 checksums</a> · <a href="/install">Install guide</a> · <a href="/changelog">What's new</a></p>
         </div>
         <ul class="dl-needs" aria-label="What you need">
           <li><b>A 64-bit computer</b><span>Intel/AMD PC (UEFI or BIOS), or ARM64 with UEFI</span></li>
           <li><b>4 GB of RAM</b><span>2 GB works in light mode; 8 GB for gaming</span></li>
-          <li><b>25 GB of disk</b><span>A whole drive, a partition, or space next to Windows</span></li>
+          <li><b>25 GB of disk</b><span>A whole drive: everything on it is replaced</span></li>
           <li><b>USB drive</b><span>8 GB or larger</span></li>
         </ul>
       </div>
@@ -158,11 +160,11 @@ page("download", "Download PolyOS 7", "Download the PolyOS 7 live USB and instal
         <li><b>Download the ISO</b><span>About 2 GB. The buttons always get the newest release.</span></li>
         <li><b>Write it to a USB drive</b><span>With balenaEtcher, or Rufus in DD mode.</span></li>
         <li><b>Start from the USB</b><span>Pick it in your computer's boot menu (F12, F9, F11 or Esc).</span></li>
-        <li><b>Install PolyOS 7</b><span>On a drive or partition, or Dual boot next to Windows.</span></li>
+        <li><b>Install PolyOS 7</b><span>Choose the drive: a fresh install replaces what's on it.</span></li>
       </ol>
-      <p class="note">Step by step, with BitLocker, boot keys for every brand and fixes: <a href="/install"><b>the install guide</b></a>.
+      <p class="note">Step by step, with boot keys for every brand and fixes: <a href="/install"><b>the install guide</b></a>.
         Already using PolyOS? New versions install from Settings › About; no new USB drive needed.</p>
-    </section>""", scripts=("/assets/site.js",))
+    </section>""", icons=("info",), scripts=("/assets/site.js",))
 
 # ---- Documentation ---------------------------------------------------------------------------
 SHORTCUTS = [("Win", "Start"), ("Win + S", "Search in Start"), ("Win + A", "Quick settings"), ("Win + W", "Widgets"), ("Win + V", "Ask Vara"), ("Win + P", "Duplicate, extend or one screen"),
@@ -173,12 +175,10 @@ shortcut_rows = "".join(f"<tr><td><kbd>{escape(k)}</kbd></td><td>{escape(v)}</td
 page("docs", "Documentation · PolyOS 7", "How to install, use and update PolyOS 7, and how Poly Account works.", prose(
     "Documentation", "Using PolyOS 7",
     'Everything from installing to updates. Stuck? See <a href="/support">Help &amp; Support</a>.', [
-        ("Install", '<p>The <a href="/install">install guide</a> covers making the USB drive, starting from it, BitLocker, '
-                    'dual boot next to Windows (or on a D: drive you made), and what to do if something goes wrong.</p>'
-                    '<p><b>Dual boot:</b> shut Windows down fully first. With Fast Startup on, Windows is only asleep, and changing its '
-                    'drive then sends it into Automatic Repair; setup notices and tells you how to turn Fast Startup off. After installing, '
-                    'PolyOS starts straight away; hold Shift or press Esc while the computer starts for the boot menu, or use '
-                    'Start › Power › <b>Restart to Windows</b>.</p>'),
+        ("Install", '<p>The <a href="/install">install guide</a> covers making the USB drive, starting from it, and what to do if '
+                    'something goes wrong.</p>'
+                    '<p><b>A fresh install:</b> PolyOS installs on a whole drive and replaces everything on it, including Windows if it\'s '
+                    'there. Dual boot next to Windows isn\'t part of the download. After installing, PolyOS starts straight to your desktop.</p>'),
         ("First start", '<p>Setup happens once, on the USB drive, before PolyOS installs. It checks your computer first: the exact '
                         'model, processor, memory and graphics. Most computers get <b>Everything on</b>; older ones get <b>Smooth</b> or '
                         '<b>Light</b>, which turn off blur and see-through glass. Then your edition, Wi-Fi and, if you like, a '
@@ -314,7 +314,6 @@ page("terms", "Terms of Service · PolyOS 7", "The terms for using Poly Account 
 FAQ = [
     ("Do I need a Poly Account?", "No. PolyOS works fully offline and updates without one. An account adds device management, recovery and sync."),
     ("How do I update PolyOS?", "Settings › Updates (or About › Update now). Without internet, download the newest ISO and install over it."),
-    ("The installer says BitLocker is on", 'Turn it off in Windows and wait for decryption to finish. The <a href="/install#bitlocker">install guide</a> shows how.'),
     ("I forgot my Poly Account password", 'Use <a href="/account#forgot">Forgot password</a> (with a verified email) or <a href="/account#recover">your recovery key</a>.'),
     ("How do I remove a computer from my account?", 'Poly Account › Devices › Manage device › Remove device. PolyOS keeps working on it.'),
     ("Something doesn't work after installing", 'Open Driver Manager first; many problems are a missing driver. The <a href="/install#help">troubleshooting list</a> covers the rest.'),

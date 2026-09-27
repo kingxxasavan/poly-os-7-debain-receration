@@ -182,6 +182,16 @@ export function mount(root, store) {
   function start() {
     const extra = [];
     extra.push(h('button.su-link', { onclick: tryFirst }, 'Try PolyOS first'));
+    // The public USB drive installs on a whole drive only; the dual-boot download offers everything.
+    if (!store.state.env.dualBoot) {
+      return [
+        ...head('It’s time to get started.', 'PolyOS installs on a drive of its own: everything on the drive you choose is replaced.'),
+        h('div.su-options',
+          option('Install PolyOS 7', 'A fresh install. Pick the drive on the next steps.', h('img', { src: '/img/logo-white.svg', alt: '' }),
+            () => { plan.mode = 'erase'; go(1); })),
+        h('div.su-foot', ...extra),
+      ];
+    }
     if (store.state.env.installer) {
       extra.push(h('span.su-dot', '·'), h('button.su-link', { onclick: () => launch(store.state.env.installer) }, 'Advanced installer'));
     }

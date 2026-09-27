@@ -38,6 +38,7 @@
       <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 3 5 13.5h6L10 21l8-10.5h-6z"/></symbol>
       <symbol id="i-github" viewBox="0 0 24 24"><path d="M9 19c-4.3 1.4-4.3-2.5-6-3m12 5v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6a4.6 4.6 0 0 0-1.3-3.2 4.2 4.2 0 0 0-.1-3.2s-1.1-.3-3.5 1.3a12.3 12.3 0 0 0-6.2 0C6.5 2.8 5.4 3.1 5.4 3.1a4.2 4.2 0 0 0-.1 3.2A4.6 4.6 0 0 0 4 9.5c0 4.6 2.7 5.7 5.5 6-.6.6-.6 1.2-.5 2V21"/></symbol>
       <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7 10.5l5 5 5-5M5 19.5h14"/></symbol>
+      <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.8v.2"/></symbol>
       <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
       <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
       <symbol id="i-left" viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></symbol>
@@ -163,7 +164,7 @@
         <figure data-cat="settings" data-full="screenshots/settings-about.jpg"><img loading="lazy" src="screenshots/thumbs/settings-about.jpg" alt="" width="720" height="450"><figcaption><b>About PolyOS</b><span>Your computer, tools and credits.</span></figcaption></figure>
         <figure data-cat="installer" data-full="screenshots/boot-menu.jpg"><img loading="lazy" src="screenshots/thumbs/boot-menu.jpg" alt="" width="720" height="450"><figcaption><b>Starting from USB</b><span>The PolyOS boot menu on the USB drive, on PCs and ARM64 computers alike.</span></figcaption></figure>
         <figure data-cat="installer" data-full="screenshots/installer-welcome.jpg"><img loading="lazy" src="screenshots/thumbs/installer-welcome.jpg" alt="" width="720" height="450"><figcaption><b>Welcome to PolyOS 7</b><span>The pinwheel and the 7, as in the Scratch setup.</span></figcaption></figure>
-        <figure data-cat="installer" data-full="screenshots/installer-start.jpg"><img loading="lazy" src="screenshots/thumbs/installer-start.jpg" alt="" width="720" height="450"><figcaption><b>It's time to get started</b><span>Install, Dual boot next to Windows, or Custom.</span></figcaption></figure>
+        <figure data-cat="installer" data-full="screenshots/installer-start.jpg"><img loading="lazy" src="screenshots/thumbs/installer-start.jpg" alt="" width="720" height="450"><figcaption><b>It's time to get started</b><span>Install PolyOS 7 on a drive of its own, or try it first.</span></figcaption></figure>
         <figure data-cat="installer" data-full="screenshots/installer-edition.jpg"><img loading="lazy" src="screenshots/thumbs/installer-edition.jpg" alt="" width="720" height="450"><figcaption><b>Pick an edition</b><span>Regular, Developer or Gaming.</span></figcaption></figure>
         <figure data-cat="installer" data-full="screenshots/installer-account.jpg"><img loading="lazy" src="screenshots/thumbs/installer-account.jpg" alt="" width="720" height="450"><figcaption><b>Create your account</b><span>Name, password, computer name and time zone.</span></figcaption></figure>
         <figure data-cat="installer" data-full="screenshots/installer-appearance.jpg"><img loading="lazy" src="screenshots/thumbs/installer-appearance.jpg" alt="" width="720" height="450"><figcaption><b>Personalization</b><span>Dark or light, and your accent color.</span></figcaption></figure>
@@ -227,11 +228,10 @@
       <div>
         <p class="eyebrow">The installer</p>
         <h2>Your drives, your choice</h2>
-        <p>The PolyOS 7 setup puts PolyOS on your computer three ways:</p>
+        <p>The PolyOS 7 setup gives PolyOS a drive of its own:</p>
         <dl class="modes">
-          <dt>Install PolyOS 7</dt><dd>“Where do you want to install PolyOS?”, like Windows Setup: every drive, partition and unallocated space in one list. Delete a partition or make a new one, pick a spot big enough, and install there.</dd>
-          <dt>Dual boot</dt><dd>Keep Windows or Linux. PolyOS uses free space, or shrinks the other system to make room, and you pick one each time you start the computer.</dd>
-          <dt>Advanced setup</dt><dd>Decide what every drive and partition is for: PolyOS, your files, extra storage, or keep it untouched. A summary lists everything that will be erased before you confirm.</dd>
+          <dt>Install PolyOS 7</dt><dd>Choose the drive. Setup shows what's on it first (Windows, say), and after you confirm, PolyOS replaces everything on it with a clean install.</dd>
+          <dt>Try PolyOS first</dt><dd>Look around from the USB drive without changing anything, and install when you're ready.</dd>
         </dl>
       </div>
       <figure class="frame tilt"><img loading="lazy" src="screenshots/installer-drives.jpg" alt="Where do you want to install PolyOS? Drives and partitions with Delete and New" width="1440" height="900"></figure>
@@ -310,13 +310,15 @@
           <p class="dl-which"><b>Which one?</b> Almost every Windows PC and laptop: <b>PC (Intel/AMD)</b>.
             Apple Silicon Macs (in UTM, Parallels or VMware Fusion), other ARM64 virtual machines and ARM64
             computers with UEFI firmware: <b>ARM64</b>.</p>
+          <p class="dl-fresh"><svg class="ico"><use href="#i-info"/></svg><span><b>A fresh install.</b> PolyOS installs on a whole drive and replaces
+            everything on the drive you choose, including Windows if it's there. Dual boot next to Windows isn't part of this download.</span></p>
           <p class="dl-note" data-release-note>Always the newest release. Clicking a button starts the download and shows you how to install.</p>
           <p class="dl-links"><a href="download/checksums" data-release-sums>SHA256 checksums</a></p>
         </div>
         <ul class="dl-needs" aria-label="What you need">
           <li><b>A 64-bit computer</b><span>Intel/AMD PC (UEFI or BIOS), or ARM64 with UEFI</span></li>
           <li><b>4 GB of RAM</b><span>8 GB for gaming</span></li>
-          <li><b>25 GB of disk</b><span>A whole drive, or space next to Windows</span></li>
+          <li><b>25 GB of disk</b><span>A whole drive: everything on it is replaced</span></li>
           <li><b>USB drive</b><span>8 GB or larger</span></li>
         </ul>
       </div>
@@ -324,9 +326,9 @@
         <li><b>Download the ISO</b><span>The buttons above always have the newest PolyOS release, for PCs and for ARM64 (about 2 GB).</span></li>
         <li><b>Write it to a USB drive</b><span>Use balenaEtcher or Rufus (DD mode). Or try it first in a virtual machine (VirtualBox, or UTM on a Mac) with 4 GB of RAM.</span></li>
         <li><b>Start from the USB</b><span>Pick the USB drive in your computer's boot menu. PolyOS starts live, so nothing changes until you install.</span></li>
-        <li><b>Install PolyOS 7</b><span>Choose a drive or partition, or Dual boot next to Windows, pick your edition, and restart when it's done.</span></li>
+        <li><b>Install PolyOS 7</b><span>Choose the drive (everything on it is replaced), pick your edition, and restart when it's done.</span></li>
       </ol>
-      <p class="note">Step by step, with boot menu keys for every brand, BitLocker and fixes for common problems:
+      <p class="note">Step by step, with boot menu keys for every brand and fixes for common problems:
         <a href="install.html"><b>the install guide</b></a>.</p>
       <p class="note">Just want to look around? Anyone with Python can preview the whole interface in a browser:
         <code>python main.py dev</code></p>
@@ -416,7 +418,7 @@
         ARM64 computers start it the same way when their firmware is UEFI (on a Raspberry Pi 4, install the
         community UEFI firmware first).</li>
       <li><b>Try it, then install</b>PolyOS starts from the USB drive without changing anything. When you're ready, click
-        <i>Install PolyOS 7</i>: a whole disk, next to Windows (Dual boot), or Custom.</li>
+        <i>Install PolyOS 7</i> and choose the drive; everything on it is replaced.</li>
     </ol>
     <ol class="guide-steps" data-guide-panel="vm" hidden>
       <li data-vm="amd64"><b>PC: VirtualBox</b>Install <a href="https://www.virtualbox.org/wiki/Downloads" target="_blank" rel="noopener">VirtualBox</a>,

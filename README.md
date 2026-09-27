@@ -396,6 +396,14 @@ set the variable `RELEASES_REPO` to its name and the secret `RELEASES_TOKEN` to 
 create releases there (and set the same `RELEASES_REPO` on Vercel). To change the release key,
 add the new public key to `TRUSTED_KEYS` one release before switching the secret.
 
+**Two PC installers.** `polyos-amd64.iso`, the one the website offers, installs PolyOS on a whole drive
+only (a fresh install): its USB drive carries `/polyos/install.json` with `{"dualBoot": false}` (from
+`iso/config/includes.binary`), so setup shows just *Install PolyOS 7* and the installer refuses any
+other mode. Each release also has `polyos-amd64-dualboot.iso`, the same ISO with that file set to
+`true` (made with `xorriso` in the release job, no second build): Dual boot, the partition list and
+Advanced setup are all there. It isn't linked from the website. `python3 main.py dev --live
+--dual-boot` shows its setup in the simulator.
+
 **SourceForge (one ISO file).** GitHub takes release files under 2 GiB, so an ISO bigger than that
 is published there in parts. `.github/workflows/sourceforge.yml` joins them after every release, checks them
 against `SHA256SUMS` and uploads the whole ISOs to `sourceforge.net/projects/<project>/files/v<version>/`.

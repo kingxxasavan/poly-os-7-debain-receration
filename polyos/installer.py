@@ -51,6 +51,7 @@ EXTENDED_MBR_TYPES = {"5", "f", "85", "0x5", "0xf", "0x85"}
 
 SQUASHFS = Path("/run/live/medium/live/filesystem.squashfs")
 LIVE_MEDIUM = Path("/run/live/medium")
+INSTALL_OPTIONS = LIVE_MEDIUM / "polyos" / "install.json"  # on the USB drive, next to live/ (not in the squashfs)
 TARGET = Path("/mnt/polyos-target")
 GRUB_THEME = "/usr/share/grub/themes/polyos"  # the boot menu's look (data/grub, packaged in polyos-shell)
 OFFLINE_DEBS = "/usr/share/polyos/installer/debs"  # efi/ and bios/: GRUB packages fetched at ISO build
@@ -441,6 +442,22 @@ def describe_disk(disk: dict, table: dict | None, prober: dict[str, str], uefi: 
     return disk
 
 
+# ==== what this USB drive offers ==============================================================
+
+FRESH_ONLY_REASON = ("This PolyOS USB drive installs PolyOS on a whole drive (a fresh install). "
+                     "To keep Windows or another system next to PolyOS, use the dual-boot download.")
+
+
+def install_options(path: Path | None = None) -> dict:
+    """The public ISO installs on a whole drive only ({"dualBoot": false} in /polyos/install.json on
+    the USB drive). The dual-boot ISO, and ISOs from before the file existed, offer everything."""
+    try:
+        data = json.loads((path or INSTALL_OPTIONS).read_text("utf-8"))
+    except (OSError, ValueError):
+        data = {}
+    return {"dualBoot": not (isinstance(data, dict) and data.get("dualBoot") is False)}
+
+
 # ==== the plan the setup UI sends ============================================================
 
 def validate_plan(plan: dict, existing_users: set[str] | None = None) -> dict:
@@ -450,6 +467,8 @@ def validate_plan(plan: dict, existing_users: set[str] | None = None) -> dict:
     mode = plan.get("mode")
     if mode not in ("erase", "space", "alongside", "custom"):
         raise InstallError("Choose how to install PolyOS.")
+    if mode != "erase" and not install_options()["dualBoot"]:
+        raise InstallError(FRESH_ONLY_REASON)
     layout = None
     if mode == "custom":
         layout = validate_layout(plan.get("wipe") or {}, plan.get("mounts") or [])

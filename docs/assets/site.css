@@ -253,6 +253,10 @@ code { padding: 2px 7px; border-radius: 7px; background: var(--card-2); font: 0.
 }
 .dl-which { margin: 14px 0 0; max-width: 560px; color: var(--text-2); font-size: 14px; }
 .dl-which b { color: var(--text); font-weight: 600; }
+.dl-fresh { display: flex; gap: 10px; align-items: flex-start; margin: 14px 0 0; max-width: 560px; padding: 10px 14px;
+  border-radius: 14px; background: rgba(0, 0, 0, 0.22); color: var(--text-2); font-size: 14px; }
+.dl-fresh .ico { flex: none; width: 18px; height: 18px; margin-top: 1px; color: var(--accent-text); }
+.dl-fresh b { color: var(--text); font-weight: 600; }
 .btn small { font: 500 13px var(--font); opacity: 0.8; }
 
 /* ---- install guide (after a download starts) ------------------------------------------------ */

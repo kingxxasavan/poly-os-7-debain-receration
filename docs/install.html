@@ -38,13 +38,14 @@
     <section class="guide-hero">
       <p class="eyebrow">Install guide</p>
       <h1>Put PolyOS 7 on your computer</h1>
-      <p>About 30 minutes, start to finish. You'll need the PolyOS ISO, a USB drive of 8 GB or more, and
-        (for dual boot) an hour or so beforehand if BitLocker is on.</p>
+      <p>About 30 minutes, start to finish. You'll need the PolyOS ISO and a USB drive of 8 GB or more.</p>
+      <p class="callout warn"><b>A fresh install.</b> The download installs PolyOS on a whole drive and replaces everything on the drive
+        you choose, including Windows if it's there. Dual boot (PolyOS next to Windows) isn't part of this download.</p>
       <ol class="guide-toc">
         <li><a href="#before">Before you start</a></li>
         <li><a href="#usb">Make the USB drive</a></li>
         <li><a href="#boot">Start from the USB drive</a></li>
-        <li><a href="#install">Install: whole drive or next to Windows</a></li>
+        <li><a href="#install">Install PolyOS</a></li>
         <li><a href="#after">After installing</a></li>
         <li><a href="#help">If something goes wrong</a></li>
       </ol>
@@ -56,39 +57,11 @@
       <div>
         <h2>Before you start</h2>
         <ul class="guide-list">
-          <li><b>Back up your files.</b> Installing changes your drives. Copy anything important to another drive or the cloud first.</li>
+          <li><b>Back up your files.</b> Installing erases the drive you choose. Copy anything important to another drive or the cloud first.</li>
           <li><b>Check your computer.</b> A 64-bit Intel or AMD PC (almost every PC from the last 12 years), or an ARM64 computer with UEFI.
-            4 GB of memory is enough; 2 GB works in PolyOS's light mode. At least 25 GB of free disk space.</li>
-          <li><b>Keeping Windows? Plug in your laptop</b> and follow the three steps below.</li>
+            4 GB of memory is enough; 2 GB works in PolyOS's light mode. A drive of at least 25 GB for PolyOS.</li>
+          <li><b>Plug in your laptop</b> so it doesn't run out of battery halfway.</li>
         </ul>
-
-        <div class="callout warn" id="bitlocker">
-          <h3><svg class="ico"><use href="#i-lock"/></svg> Turn off BitLocker first (dual boot only)</h3>
-          <p>Many Windows 11 laptops encrypt the drive with BitLocker (also called <i>Device encryption</i>). PolyOS can't
-            be installed next to Windows while it's on: the encrypted partition can't make room, and a new boot menu makes
-            Windows ask for its recovery key. The PolyOS installer tells you when it finds BitLocker.</p>
-          <ol>
-            <li>In Windows, save your recovery key just in case: <a href="https://aka.ms/myrecoverykey" target="_blank" rel="noopener">aka.ms/myrecoverykey</a>.</li>
-            <li>Open <b>Settings › Privacy &amp; security › Device encryption</b> and turn it off. On Windows Pro, use
-              <b>Control Panel › BitLocker Drive Encryption › Turn off BitLocker</b>, for every drive listed.</li>
-            <li>Wait until Windows says <b>decryption is complete</b>. It can take an hour or more; keep the laptop plugged in.
-              While it's still decrypting, PolyOS still sees BitLocker.</li>
-          </ol>
-        </div>
-
-        <div class="callout">
-          <h3><svg class="ico"><use href="#i-info"/></svg> Turn off Fast Startup (dual boot only)</h3>
-          <p><b>Control Panel › Power Options › Choose what the power buttons do › Change settings that are currently unavailable</b>,
-            untick <i>Turn on fast startup</i>, then <b>Shut down</b> (not Restart). Otherwise Windows leaves its drive half-closed and it can't be changed safely.</p>
-        </div>
-
-        <div class="callout">
-          <h3><svg class="ico"><use href="#i-info"/></svg> Make space for PolyOS (optional)</h3>
-          <p>PolyOS's <i>Dual boot</i> can shrink Windows by itself. If you'd rather choose the space yourself, do it in Windows:
-            right-click Start › <b>Disk Management</b> › right-click <i>(C:)</i> › <b>Shrink Volume</b> (25 GB or more). Leave the space
-            <i>Unallocated</i>, or make a new drive (D:) from it; you'll pick either one in the installer. Anything on that D: drive is erased
-            when PolyOS goes there.</p>
-        </div>
       </div>
     </section>
 
@@ -147,20 +120,14 @@
     <section class="guide-step" id="install">
       <span class="guide-num">4</span>
       <div>
-        <h2>Install: a whole drive, or next to Windows</h2>
+        <h2>Install PolyOS</h2>
         <p>PolyOS opens with <i>It's time to get started</i>. First it checks the computer (processor, memory, graphics and the exact model);
           most computers get everything on, and older ones get a lighter PolyOS. Then:</p>
         <div class="guide-choices">
           <article>
             <h3>Install PolyOS 7</h3>
-            <p>A Windows Setup style list of every drive, partition and unallocated space. Pick where PolyOS goes (a partition
-              is erased; unallocated space leaves everything else alone). <i>Delete</i> and <i>New</i> change drives right away,
-              after asking.</p>
-          </article>
-          <article>
-            <h3>Dual boot</h3>
-            <p>Next to Windows. PolyOS finds free space or shrinks Windows, and you choose how much PolyOS gets. Made a D: drive
-              for it? Choose <b>Choose a partition instead (like a D: drive)</b> and pick it in the list.</p>
+            <p>Choose the drive PolyOS goes on. Everything on it is replaced, so PolyOS has the whole drive to itself.
+              Setup shows what's on each drive (Windows, say) before you tick <i>I understand that this disk will be erased</i>.</p>
           </article>
           <article>
             <h3>Try PolyOS first</h3>
@@ -172,7 +139,6 @@
           screen goes dark. PolyOS starts straight to your desktop; drivers and your edition's apps finish installing in the
           background once you're online. Forgot the USB drive in the computer? Its menu starts your installed PolyOS after
           5 seconds anyway.</p>
-        <p>Next to Windows, every start shows the PolyOS boot menu: <b>PolyOS</b> or <b>Windows Boot Manager</b>, starting PolyOS after 10 seconds.</p>
       </div>
     </section>
 
@@ -199,16 +165,9 @@
       <div>
         <h2>If something goes wrong</h2>
         <dl class="guide-faq">
-          <dt>“BitLocker is on” in the installer</dt>
-          <dd>Turn it off in Windows and wait for decryption to finish (<a href="#bitlocker">steps above</a>), then start the USB drive again.</dd>
           <dt>My drive isn't in the list, or only the USB drive is</dt>
           <dd>Many Intel laptops ship with <i>Intel RST</i> / <i>VMD</i> (RAID) turned on, which hides the drive from Linux. In the BIOS, set the storage mode to
             <b>AHCI</b> or turn off VMD. Windows needs a small change first so it still starts: search Microsoft's guide “switch from RAID to AHCI” before you change it.</dd>
-          <dt>Only “the whole disk” is offered</dt>
-          <dd>Use <b>Install PolyOS 7</b> (the drive list) or, in Dual boot, <b>Choose a partition instead</b>; both list every partition, including a D: drive. The
-            download from before PolyOS 0.7 didn't have this list, so download the newest ISO.</dd>
-          <dt>Windows doesn't show in the boot menu</dt>
-          <dd>Start PolyOS, open a terminal and run <code>sudo update-grub</code>. If Windows was hibernating (Fast Startup), turn that off in Windows first.</dd>
           <dt>A black screen after choosing PolyOS</dt>
           <dd>Choose <b>Start PolyOS 7 (safe mode)</b> on the USB drive's boot menu, or <i>Advanced options for PolyOS</i> on an installed computer, then install
             your graphics driver in Driver Manager.</dd>
