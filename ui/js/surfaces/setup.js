@@ -1,7 +1,7 @@
 // PolyOS 7 setup, after the Scratch original: "Cryptic Software presents", the pinwheel falls
 // into place, the striped 7 slides in, and the crystal backdrop says welcome. Then:
 //   live USB:      It's time to get started (install / dual boot / custom) → Terms → Edition
-//                  → Account → Appearance → Where to install → installing → restart
+//                  → Account → Personalization → Where to install → installing → restart
 //   first sign-in: Wi-Fi → Drivers → your edition's apps → Vara → Tour → done
 
 import { withAdmin, watchJobs } from '../admin.js';
@@ -27,7 +27,7 @@ const FALLBACK_ZONES = ['America/New_York', 'America/Chicago', 'America/Denver',
 
 // PolyOS editions, chosen while installing. Each one's apps download after installing, once online.
 export const EDITIONS = [
-  ['regular', 'Regular', 'Everything most people need: the PolyOS desktop, Firefox, Files and PolyMarket.', 'star'],
+  ['regular', 'Regular', 'Everything most people need: the PolyOS desktop, Google Chrome, Files and PolyMarket.', 'star'],
   ['developer', 'Developer', 'Change PolyOS itself, and get coding tools: Git, Python and its libraries, Node.js, VS Code, Docker and Blender.', 'code'],
   ['gaming', 'Gaming', 'Steam, Wine for Windows games, Heroic, Lutris, cloud gaming, drivers and Game Mode, set up for play.', 'gamepad'],
 ];
@@ -326,7 +326,7 @@ export function mount(root, store) {
       send(plan.appearance.accent);
     });
     return [
-      ...head('Appearance', 'Customize whether dark or light theme should be used, and UI accent color. This can be changed anytime.'),
+      ...head('Personalization', 'Customize whether dark or light theme should be used, and UI accent color. This can be changed anytime.'),
       h('div.su-themes', darkBtn, lightBtn),
       h('div.su-accent', h('span', 'Accent color'), hue),
       nav(next()),

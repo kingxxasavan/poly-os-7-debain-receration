@@ -1099,7 +1099,7 @@ const pages = {
       skillsGroup,
       memoryGroup,
       group('Privacy', h('p.prose',
-        'Simple requests like “open Firefox” or “volume 40” are handled on this computer. Other messages, and what Vara ',
+        'Simple requests like “open Chrome” or “volume 40” are handled on this computer. Other messages, and what Vara ',
         'reads while working (files, command output), go to the endpoint above; with a cloud provider they leave this computer, ',
         'so don’t share passwords with Vara. Vara never opens SSH keys, saved passwords, browser data or its own API key.')),
     );

@@ -274,6 +274,7 @@ class DesktopShell(Backend):
 
     def _on_panel_leave(self, _win, event):
         if event.detail != Gdk.NotifyType.INFERIOR:
+            self._drop_tooltip(self.panel)
             self._schedule_dock_hide()
         return False
 
@@ -416,7 +417,15 @@ class DesktopShell(Backend):
     def _show_popup(self, popup: dict) -> None:
         GLib.idle_add(self._show_popup_main, popup)
 
+    def _drop_tooltip(self, win: Gtk.Window) -> None:
+        """Close a surface's tooltip. Moving from the taskbar straight into a popup can leave it
+        on screen as an empty box (its text cleared, the window never hidden)."""
+        view = getattr(win, "view", None)
+        if view is not None:
+            view.trigger_tooltip_query()  # asks again where the pointer is now: nothing there, no tooltip
+
     def _show_popup_main(self, popup: dict):
+        self._drop_tooltip(self.panel)
         g = self._geometry()
         if self._dock_hidden and not popup.get("fullscreen"):
             self._dock_hidden = False  # e.g. the Windows key: the menu opens from a visible taskbar
@@ -868,6 +877,8 @@ class DesktopShell(Backend):
     def _apply_power(self, settings: dict, initial: bool = False) -> None:
         profile = power.apply_mode(settings["powerMode"])
         screen_off, _sleep = power.timers(settings)
+        if self._live:
+            screen_off = 0  # the live USB: installing takes a while, and a dark screen looks frozen
         power.apply_screen_off(screen_off)
         if settings["powerMode"] == "saver" and not initial:
             level = self.backlight.get()

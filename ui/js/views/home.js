@@ -12,15 +12,15 @@ const PER_PAGE = 18; // 6 columns, 3 rows
 const SETTINGS_PAGES = [
   ['display', 'Display', 'monitor', 'screen resolution brightness night light scale'],
   ['sound', 'Sound', 'volume', 'speakers microphone volume output input'],
-  ['account', 'Account', 'user', 'password name picture user'],
-  ['polyaccount', 'Poly Account', 'globe', 'sync sign in cloud'],
+  ['account', 'Account', 'user', 'password pin name picture user poly account sync sign in cloud'],
   ['privacy', 'Privacy & Security', 'shield', 'firewall camera microphone lock'],
   ['network', 'Wi-Fi & Network', 'wifi', 'internet wireless ethernet airplane'],
-  ['appearance', 'Appearance', 'palette', 'wallpaper background theme dark light accent color'],
+  ['appearance', 'Personalization', 'palette', 'appearance wallpaper background theme dark light accent color'],
   ['taskbar', 'Taskbar & Desktop', 'taskbar', 'dock icons widgets clock'],
   ['gaming', 'Gaming', 'gamepad', 'game mode cloud controllers steam'],
   ['vara', 'Vara', 'chat', 'assistant ai'],
   ['apps', 'Apps', 'apps', 'uninstall startup default programs'],
+  ['storage', 'Storage', 'disk', 'disk space drive free clean trash'],
   ['power', 'Power & Performance', 'bolt', 'battery energy saver sleep screen off'],
   ['updates', 'Updates', 'download', 'update upgrade version'],
   ['about', 'About', 'info', 'version computer name system information'],
@@ -141,8 +141,11 @@ export default function home(root, store) {
     const apps = searchApps(visible().filter((a) => !a.superseded), q).slice(0, 8);
     const plain = (t) => t.toLowerCase().replace(/[^a-z0-9 ]/g, ''); // "wifi" finds "Wi-Fi"
     const ql = plain(q.trim());
-    const pages = SETTINGS_PAGES.filter(([, name, , words]) => plain(name).includes(ql)
-      || plain(`${name} ${words}`).split(' ').some((w) => w && w.startsWith(ql))).slice(0, 4);
+    const typed = ql.split(' ').filter(Boolean); // "night light", "poly account": every word counts
+    const pages = SETTINGS_PAGES.filter(([, name, , words]) => {
+      const keys = plain(`${name} ${words}`).split(' ').filter(Boolean);
+      return plain(name).includes(ql) || typed.every((t) => keys.some((k) => k.startsWith(t)));
+    }).slice(0, 4);
     const docs = files.filter((f) => plain(f.name).includes(ql)).slice(0, 4);
     const out = [];
     const best = apps[0] ? { app: apps[0] } : pages[0] ? { page: pages[0] } : docs[0] ? { file: docs[0] } : null;
