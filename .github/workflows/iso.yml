@@ -183,6 +183,8 @@ jobs:
 
       # The body: RELEASE_NOTES.md first (PolyOS and the website show only that part), then the files.
       - name: Release notes
+        env:
+          SF_PROJECT: ${{ vars.SF_PROJECT }}
         run: |
           {
             editions="$(python3 -c 'import polyos; print(" and ".join(e.title() for e in polyos.__editions__))')"
@@ -197,7 +199,9 @@ jobs:
             echo '| `polyos-amd64.iso` | Intel and AMD PCs and laptops (almost every Windows PC) |'
             echo '| `polyos-arm64.iso` | ARM64: Apple Silicon Macs in UTM, Parallels or VMware Fusion, ARM cloud servers, and ARM64 computers with UEFI firmware (from a USB drive) |'
             echo
-            if [ -n "${PARTS:-}" ]; then
+            if [ -n "${SF_PROJECT:-}" ]; then
+              echo "1. Download the \`.iso\` for your computer, as one file, from [SourceForge](https://sourceforge.net/projects/$SF_PROJECT/files/${{ needs.setup.outputs.tag }}/) (or from the website's Download page)."
+            elif [ -n "${PARTS:-}" ]; then
               echo '1. Download the `.iso` for your computer (in parts: join them with `cat polyos-*.part* > polyos.iso` on Linux/macOS, or `copy /b part0+part1 polyos.iso` on Windows).'
             else
               echo '1. Download the `.iso` for your computer.'
@@ -230,3 +234,13 @@ jobs:
             dist/polyos-update.json.sig
           body_path: dist/RELEASE_BODY.md
           generate_release_notes: ${{ env.RELEASES_REPO == github.repository }}
+
+  # The whole ISOs on SourceForge too (no 2 GB limit there); does nothing until SourceForge is set up
+  sourceforge:
+    needs: [setup, release]
+    if: ${{ !cancelled() && needs.release.result == 'success' }}
+    uses: ./.github/workflows/sourceforge.yml
+    with:
+      tag: ${{ needs.setup.outputs.tag }}
+    secrets:
+      SF_SSH_KEY: ${{ secrets.SF_SSH_KEY }}

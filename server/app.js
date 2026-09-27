@@ -321,8 +321,15 @@ route('GET', '/api/download/:what', null, async ({ params, res }) => {
   let location = releases.latestFileUrl(file); // works even when GitHub's API is busy
   try {
     const rel = await releases.latest('stable');
-    const asset = rel.assets[file] || rel.assets[`${file}.part0`];
-    if (asset) location = asset.url;
+    const project = (process.env.SOURCEFORGE_PROJECT || '').trim();
+    if (project && file.endsWith('.iso') && /^[a-z0-9-]+$/i.test(project)) {
+      // the whole ISO, one file, from SourceForge (GitHub holds files under 2 GB, so big ISOs are in parts there)
+      location = `https://sourceforge.net/projects/${project}/files/v${rel.version}/${file}/download`;
+    } else if (rel.assets[file]) {
+      location = rel.assets[file].url;
+    } else if (rel.assets[`${file}.part0`]) {
+      location = rel.page; // only in parts: the release page lists them (a single part isn't a working ISO)
+    }
   } catch { /* the direct link above */ }
   res.statusCode = 302;
   res.setHeader('Location', location);

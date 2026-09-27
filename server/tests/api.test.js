@@ -211,6 +211,15 @@ test('update check and downloads need no account', async () => {
   const dl = await anyone('GET', '/api/download/pc');
   assert.equal(dl.status, 302);
   assert.equal(dl.headers.location, 'https://example.test/polyos-amd64.iso');
+  // with SourceForge set up, the whole ISO comes from there (GitHub may hold it only in parts)
+  process.env.SOURCEFORGE_PROJECT = 'polyos-7';
+  try {
+    const sf = await anyone('GET', '/api/download/pc');
+    assert.match(sf.headers.location, /^https:\/\/sourceforge\.net\/projects\/polyos-7\/files\/v[0-9.]+\/polyos-amd64\.iso\/download$/);
+    assert.equal((await anyone('GET', '/api/download/checksums')).headers.location.includes('sourceforge'), false);
+  } finally {
+    delete process.env.SOURCEFORGE_PROJECT;
+  }
 });
 
 test('rate limits sign-in attempts', async () => {

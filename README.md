@@ -396,6 +396,15 @@ set the variable `RELEASES_REPO` to its name and the secret `RELEASES_TOKEN` to 
 create releases there (and set the same `RELEASES_REPO` on Vercel). To change the release key,
 add the new public key to `TRUSTED_KEYS` one release before switching the secret.
 
+**SourceForge (one ISO file).** GitHub keeps release files under 2 GB, so a bigger ISO is published
+there in parts. `.github/workflows/sourceforge.yml` joins them after every release, checks them
+against `SHA256SUMS` and uploads the whole ISOs to `sourceforge.net/projects/<project>/files/v<version>/`.
+Set it up once: the repository variables `SF_PROJECT` (the project's short name) and `SF_USER` (your
+SourceForge username), and the secret `SF_SSH_KEY` (a private SSH key whose public half is in
+SourceForge > Account Settings > SSH Settings). Then set `SOURCEFORGE_PROJECT` on Vercel, and the
+website's Download buttons hand out the one-file ISO from SourceForge. *Actions > Mirror to
+SourceForge > Run workflow* mirrors a release that's already out.
+
 **Updates for one edition.** Set `__editions__ = ("developer",)` in `polyos/__init__.py` (next to
 `__version__`) to send a release only to Developer edition computers. The workflow writes the
 editions into the signed `polyos-update.json` and publishes the release as a GitHub pre-release;

@@ -1,0 +1,93 @@
+# Mirror a PolyOS release to SourceForge as whole ISO files.
+#
+# GitHub keeps release files under 2 GB, so a bigger ISO is published there in parts. SourceForge
+# has no such limit: this joins the parts, checks every ISO against the release's SHA256SUMS, and
+# uploads them to https://sourceforge.net/projects/<project>/files/v<version>/. The website's
+# Download buttons send people there when the Vercel variable SOURCEFORGE_PROJECT is set.
+#
+# Runs after every release (iso.yml calls it), or by hand: Actions > Mirror to SourceForge > Run
+# workflow, with a tag like v1.3.2 (empty: the newest release).
+#
+# Setup, once:
+#   variable SF_PROJECT   the SourceForge project's short name (sourceforge.net/projects/<this>)
+#   variable SF_USER      your SourceForge username
+#   secret   SF_SSH_KEY   a private SSH key whose public half is in SourceForge > Account Settings > SSH Settings
+# Without them this does nothing.
+
+name: Mirror to SourceForge
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release to mirror (e.g. v1.3.2; empty = the newest)
+        required: false
+        default: ''
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+    secrets:
+      SF_SSH_KEY:
+        required: false
+
+permissions:
+  contents: read
+
+env:
+  RELEASES_REPO: ${{ vars.RELEASES_REPO || github.repository }}
+  SF_PROJECT: ${{ vars.SF_PROJECT }}
+  SF_USER: ${{ vars.SF_USER }}
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Is SourceForge set up?
+        id: ready
+        env:
+          SF_SSH_KEY: ${{ secrets.SF_SSH_KEY }}
+        run: |
+          if [ -z "$SF_PROJECT" ] || [ -z "$SF_USER" ] || [ -z "$SF_SSH_KEY" ]; then
+            echo "::notice::SourceForge isn't set up (variables SF_PROJECT and SF_USER, secret SF_SSH_KEY), so nothing is mirrored."
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download the release and join the ISO parts
+        if: steps.ready.outputs.go == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          mkdir iso && cd iso
+          if [ -z "$TAG" ]; then TAG="$(gh release view --repo "$RELEASES_REPO" --json tagName -q .tagName)"; fi
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+          gh release download "$TAG" --repo "$RELEASES_REPO" --pattern 'polyos-*.iso' --pattern 'polyos-*.iso.part*' --pattern SHA256SUMS
+          for first in *.iso.part0; do
+            [ -e "$first" ] || continue
+            iso="${first%.part0}"
+            cat $(ls "$iso".part* | sort -V) > "$iso"
+            rm "$iso".part*
+          done
+          # the whole ISOs must match what the release says (SHA256SUMS lists them before any parts)
+          grep -E ' polyos-[a-z0-9]+\.iso$' SHA256SUMS > whole.sha256
+          sha256sum -c whole.sha256
+          rm whole.sha256
+          ls -lh
+
+      - name: Upload to SourceForge
+        if: steps.ready.outputs.go == 'true'
+        env:
+          SF_SSH_KEY: ${{ secrets.SF_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SF_SSH_KEY" > ~/.ssh/sf && chmod 600 ~/.ssh/sf
+          ssh-keyscan -t ed25519,rsa frs.sourceforge.net >> ~/.ssh/known_hosts 2>/dev/null
+          rsync -av --progress -e "ssh -i ~/.ssh/sf" iso/ \
+            "$SF_USER@frs.sourceforge.net:/home/frs/project/$SF_PROJECT/$TAG/"
+          echo "Mirrored: https://sourceforge.net/projects/$SF_PROJECT/files/$TAG/"
+          echo "### [PolyOS $TAG on SourceForge](https://sourceforge.net/projects/$SF_PROJECT/files/$TAG/)" >> "$GITHUB_STEP_SUMMARY"

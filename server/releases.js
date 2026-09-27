@@ -32,6 +32,7 @@ function summarize(release) {
     notes: String(release.body || '').split('<!-- files -->')[0].trim(), // the notes, not the download table
     published: release.published_at,
     prerelease: Boolean(release.prerelease),
+    page: release.html_url || `https://github.com/${releasesRepo()}/releases/tag/${release.tag_name}`,
     assets,
   };
 }
