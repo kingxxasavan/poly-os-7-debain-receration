@@ -32,37 +32,33 @@ both ISOs and publishes them (see the main README).
 
 ## Screenshots
 
+| Desktop | Start menu | Quick settings |
+|---|---|---|
+| ![](screenshots/thumbs/desktop.jpg) | ![](screenshots/thumbs/start-menu.jpg) | ![](screenshots/thumbs/quick-settings.jpg) |
+
+| Running apps | Widgets | Files |
+|---|---|---|
+| ![](screenshots/thumbs/tray.jpg) | ![](screenshots/thumbs/widgets.jpg) | ![](screenshots/thumbs/files.jpg) |
+
+| PolyMarket | Task Manager | Driver Manager |
+|---|---|---|
+| ![](screenshots/thumbs/polymarket.jpg) | ![](screenshots/thumbs/task-manager.jpg) | ![](screenshots/thumbs/driver-manager.jpg) |
+
+| Personalization | Account | Apps |
+|---|---|---|
+| ![](screenshots/thumbs/settings-appearance.jpg) | ![](screenshots/thumbs/settings-account.jpg) | ![](screenshots/thumbs/settings-apps.jpg) |
+
+| Storage | Display | Updates |
+|---|---|---|
+| ![](screenshots/thumbs/settings-storage.jpg) | ![](screenshots/thumbs/settings-display.jpg) | ![](screenshots/thumbs/settings-updates.jpg) |
+
 | Login | Sign in | Lock screen |
 |---|---|---|
 | ![](screenshots/thumbs/login.jpg) | ![](screenshots/thumbs/login-password.jpg) | ![](screenshots/thumbs/lock.jpg) |
 
-| Home Menu | Launcher | Widgets |
+| Setup: start | Setup: set up like one of your computers | Setup: choose the drive |
 |---|---|---|
-| ![](screenshots/thumbs/home-menu.jpg) | ![](screenshots/thumbs/launcher.jpg) | ![](screenshots/thumbs/widgets.jpg) |
-
-| Files | Task Manager | PolyMarket |
-|---|---|---|
-| ![](screenshots/thumbs/files.jpg) | ![](screenshots/thumbs/task-manager.jpg) | ![](screenshots/thumbs/polymarket.jpg) |
-
-| Taskbar settings | Power & Performance | Privacy & Security |
-|---|---|---|
-| ![](screenshots/thumbs/settings-taskbar.jpg) | ![](screenshots/thumbs/settings-power.jpg) | ![](screenshots/thumbs/settings-privacy.jpg) |
-
-| Gaming | Developer | Driver Manager |
-|---|---|---|
-| ![](screenshots/thumbs/settings-gaming.jpg) | ![](screenshots/thumbs/settings-developer.jpg) | ![](screenshots/thumbs/driver-manager.jpg) |
-
-| Vara at work | Vara asks first | Settings: Vara |
-|---|---|---|
-| ![](screenshots/thumbs/vara.jpg) | ![](screenshots/thumbs/vara-approval.jpg) | ![](screenshots/thumbs/settings-vara.jpg) |
-
-| USB boot menu | PolyMarket: 3D & Making | App launcher |
-|---|---|---|
-| ![](screenshots/thumbs/boot-menu.jpg) | ![](screenshots/thumbs/polymarket-making.jpg) | ![](screenshots/thumbs/launcher.jpg) |
-
-| Installer: start | Installer: editions | Installer: drives and partitions |
-|---|---|---|
-| ![](screenshots/thumbs/installer-start.jpg) | ![](screenshots/thumbs/installer-edition.jpg) | ![](screenshots/thumbs/installer-drives.jpg) |
+| ![](screenshots/thumbs/installer-start.jpg) | ![](screenshots/thumbs/installer-restore.jpg) | ![](screenshots/thumbs/installer-drives.jpg) |
 
 All screenshots are full size in [`screenshots/`](screenshots/) (1440×900) with small copies in
 [`screenshots/thumbs/`](screenshots/thumbs/).

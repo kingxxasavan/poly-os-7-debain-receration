@@ -7,28 +7,24 @@
   <meta name="description" content="PolyOS 7, the operating system built in Scratch by PIXAPoLY Software, brought to real life on Debian by Cryptic Software.">
   <meta property="og:title" content="PolyOS 7 for Debian">
   <meta property="og:description" content="The Scratch operating system, now a real desktop you can install on your PC.">
-  <meta property="og:image" content="screenshots/desktop.jpg">
+  <meta property="og:image" content="screenshots/start-menu.jpg">
   <meta name="theme-color" content="#151515">
   <link rel="icon" href="assets/logo.svg" type="image/svg+xml">
   <link rel="stylesheet" href="assets/site.css">
   <script src="assets/site.js" defer></script>
 </head>
-<body>
+<body class="home">
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
     <defs>
       <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20c.9-3.8 3.9-5.8 7.5-5.8s6.6 2 7.5 5.8"/></symbol>
-      <symbol id="i-cube" viewBox="0 0 24 24"><path d="M12 3.5 19.5 7.7v8.6L12 20.5l-7.5-4.2V7.7z"/><path d="M4.5 7.7 12 12l7.5-4.3M12 12v8.5"/></symbol>
-      <symbol id="i-robot" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 8V4.5M9.5 19v1.5M14.5 19v1.5M3 12.5v3M21 12.5v3"/><circle cx="12" cy="4" r="1"/><circle cx="9.5" cy="13" r="1.1" fill="currentColor"/><circle cx="14.5" cy="13" r="1.1" fill="currentColor"/></symbol>
       <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/></symbol>
       <symbol id="i-desktop" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><path d="M3 15.5h18M9 17.5h6"/></symbol>
       <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="6.5" height="6.5" rx="1.8"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.8"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.8"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.8"/></symbol>
       <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3.5 13.8 10.2 20.5 12l-6.7 1.8L12 20.5l-1.8-6.7L3.5 12l6.7-1.8z"/></symbol>
       <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3.5 7.5A2 2 0 0 1 5.5 5.5h4l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></symbol>
-      <symbol id="i-activity" viewBox="0 0 24 24"><path d="M3 12h4l2.5-6 5 12 2.5-6H21"/></symbol>
       <symbol id="i-chip" viewBox="0 0 24 24"><rect x="6.5" y="6.5" width="11" height="11" rx="2"/><path d="M9.5 3v3.5M14.5 3v3.5M9.5 17.5V21M14.5 17.5V21M3 9.5h3.5M3 14.5h3.5M17.5 9.5H21M17.5 14.5H21"/></symbol>
       <symbol id="i-bag" viewBox="0 0 24 24"><path d="M5 8h14l-1 12H6z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/></symbol>
       <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></symbol>
-      <symbol id="i-camera" viewBox="0 0 24 24"><path d="M8.5 6.5 10 4.5h4l1.5 2H19a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8.5a2 2 0 0 1 2-2z"/><circle cx="12" cy="12.5" r="3.6"/></symbol>
       <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4.5 5.5h15v10h-9l-4 3.5v-3.5h-2z"/></symbol>
       <symbol id="i-disk" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2.5"/><circle cx="16.5" cy="15" r="1" fill="currentColor"/><path d="M7 15h5"/></symbol>
       <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3.8 2.5 5.2 5.7.8-4.1 4 1 5.6L12 16.8 6.9 19.4l1-5.6-4.1-4 5.7-.8z"/></symbol>
@@ -36,27 +32,35 @@
       <symbol id="i-gamepad" viewBox="0 0 24 24"><path d="M7.5 7h9a4.5 4.5 0 0 1 4.3 3.2l1.2 4.3a2.6 2.6 0 0 1-4.5 2.4L15.6 15H8.4l-1.9 1.9A2.6 2.6 0 0 1 2 14.5l1.2-4.3A4.5 4.5 0 0 1 7.5 7z"/><path d="M8 9.5v3M6.5 11h3"/></symbol>
       <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3.5 19 6v5.5c0 4.3-2.9 7.6-7 9-4.1-1.4-7-4.7-7-9V6z"/><path d="m9 12 2.2 2.2L15.5 10"/></symbol>
       <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 3 5 13.5h6L10 21l8-10.5h-6z"/></symbol>
-      <symbol id="i-github" viewBox="0 0 24 24"><path d="M9 19c-4.3 1.4-4.3-2.5-6-3m12 5v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6a4.6 4.6 0 0 0-1.3-3.2 4.2 4.2 0 0 0-.1-3.2s-1.1-.3-3.5 1.3a12.3 12.3 0 0 0-6.2 0C6.5 2.8 5.4 3.1 5.4 3.1a4.2 4.2 0 0 0-.1 3.2A4.6 4.6 0 0 0 4 9.5c0 4.6 2.7 5.7 5.5 6-.6.6-.6 1.2-.5 2V21"/></symbol>
       <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7 10.5l5 5 5-5M5 19.5h14"/></symbol>
       <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.8v.2"/></symbol>
       <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
       <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
       <symbol id="i-left" viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></symbol>
       <symbol id="i-right" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
+      <symbol id="i-laptop" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="10" rx="1.5"/><path d="M2.5 18.5h19"/></symbol>
+      <symbol id="i-sync" viewBox="0 0 24 24"><path d="M19.5 11a7.5 7.5 0 0 0-13.4-4.3L4.5 8.5M4.5 13a7.5 7.5 0 0 0 13.4 4.3l1.6-1.8"/><path d="M4.5 4v4.5H9M19.5 20v-4.5H15"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+      <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></symbol>
+      <symbol id="i-zoom" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5M11 8v6M8 11h6"/></symbol>
+      <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 4 21 19.5H3z"/><path d="M12 10v4.5M12 17v.2"/></symbol>
     </defs>
   </svg>
 
   <header class="nav" id="top">
     <a class="brand" href="/"><img src="/assets/logo.svg" alt="" width="30" height="30"><span>PolyOS <b>7</b></span></a>
-    <nav aria-label="Site">
+    <nav id="site-nav" aria-label="Site">
       <a href="/download">Download</a>
       <a href="/#features">Features</a>
+      <a href="/#tour">Tour</a>
+      <a href="/#faq">FAQ</a>
       <a href="/docs">Docs</a>
       <a href="/changelog">Updates</a>
-      <a href="/security">Security</a>
       <a href="/support">Support</a>
     </nav>
-    <a class="btn small" href="/account"><svg class="ico"><use href="#i-user"/></svg>Poly Account</a>
+    <a class="btn small nav-account" href="/account"><svg class="ico"><use href="#i-user"/></svg>Poly Account</a>
+    <button class="nav-toggle" type="button" aria-label="Menu" aria-expanded="false" aria-controls="site-nav"><span></span><span></span></button>
+    <div class="nav-progress" aria-hidden="true"></div>
   </header>
 
   <main>
@@ -64,205 +68,193 @@
     <section class="hero">
       <div class="hero-glow" aria-hidden="true"></div>
       <div class="hero-text">
-        <p class="eyebrow">Cryptic Software presents</p>
+        <a class="announce" href="#whats-new"><span class="announce-tag">New in 1.4</span>Set up like one of your computers<svg class="ico"><use href="#i-arrow"/></svg></a>
         <h1>PolyOS 7,<br><span class="grad">on real hardware.</span></h1>
-        <p class="lead">PolyOS started as an operating system built in Scratch by PIXAPoLY team.
+        <p class="lead">PolyOS started as an operating system built in Scratch by the PIXAPoLY team.
           This project turns it into a real desktop that boots on your PC: the PolyOS look you know, on top of
           Debian's drivers, Wi-Fi, apps and security.</p>
         <div class="cta">
-          <a class="btn primary" href="#download"><svg class="ico"><use href="#i-download"/></svg>Download PolyOS 7</a>
-          <a class="btn" href="#gallery">See it in action<svg class="ico"><use href="#i-arrow"/></svg></a>
+          <a class="btn primary big" href="#download"><svg class="ico"><use href="#i-download"/></svg>Download PolyOS 7</a>
+          <a class="btn big" href="#tour">Take the tour<svg class="ico"><use href="#i-arrow"/></svg></a>
         </div>
+        <ul class="trust" aria-label="In short">
+          <li><svg class="ico"><use href="#i-check"/></svg>Free and open source</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>No account needed</li>
+          <li><svg class="ico"><use href="#i-check"/></svg>Signed updates</li>
+        </ul>
       </div>
-      <figure class="hero-shot">
-        <div class="frame"><img src="screenshots/desktop.jpg" alt="The PolyOS 7 desktop: crystal wallpaper, shortcuts and the capsule dock" width="1440" height="900"></div>
+      <figure class="hero-shot" data-tilt>
+        <div class="frame"><img src="screenshots/start-menu.jpg" alt="The PolyOS 7 desktop with the Start menu open" width="1440" height="900" fetchpriority="high"></div>
+        <div class="float-chip chip-a" aria-hidden="true"><svg class="ico"><use href="#i-shield"/></svg>Firewall on</div>
+        <div class="float-chip chip-b" aria-hidden="true"><svg class="ico"><use href="#i-sync"/></svg>Updated 2 min ago</div>
       </figure>
     </section>
 
-    <section class="stats" aria-label="The project in numbers">
-      <div><b>12</b><span>PolyOS screens and apps</span></div>
-      <div><b>51</b><span>apps in PolyMarket</span></div>
-      <div><b>3</b><span>editions: Regular, Developer, Gaming</span></div>
-      <div><b>119</b><span>automated tests</span></div>
-      <div><b>20k</b><span>lines of code</span></div>
+    <section class="stats reveal" aria-label="The project in numbers">
+      <div><b data-count="3">3</b><span>editions: Regular, Developer, Gaming</span></div>
+      <div><b data-count="51">51</b><span>apps in PolyMarket</span></div>
+      <div><b data-count="240">240</b><span>automated tests</span></div>
+      <div><b data-count="25" data-suffix="k">25k</b><span>lines of code</span></div>
+      <div><b data-count="0">0</b><span>accounts you need</span></div>
     </section>
 
     <!-- ---- features ------------------------------------------------------------------ -->
     <section class="section" id="features">
-      <div class="section-head">
+      <div class="section-head reveal">
         <p class="eyebrow">What's inside</p>
         <h2>Everything PolyOS 7 is, working for real</h2>
         <p>Every screen follows the Scratch original: its colors, shapes and layout were measured from the PolyOS 7 costumes.</p>
       </div>
-      <div class="features">
-        <article class="feature"><svg class="ico"><use href="#i-lock"/></svg><h3>Login and lock screen</h3>
-          <p>The PolyOS 7 design: a big stacked clock, date, <i>Performance: Optimal</i>, news and notifications over the blurred amethyst crystal. Locks instantly with Win+L, and a recovery key resets a forgotten password.</p></article>
-        <article class="feature"><svg class="ico"><use href="#i-desktop"/></svg><h3>Desktop and dock</h3>
-          <p>The capsule dock with pinned and running apps, app shortcuts on the wallpaper, a right-click menu, and a taskbar you can float, stretch edge to edge, align left or hide.</p></article>
-        <article class="feature"><svg class="ico"><use href="#i-grid"/></svg><h3>Start menu</h3>
-          <p>Tap the Windows key for Start: search apps, settings and files, your pinned apps, All apps, and your recent files, with power and Settings at the bottom.</p></article>
-        <article class="feature"><svg class="ico"><use href="#i-sparkle"/></svg><h3>Widgets</h3>
-          <p>Win+W: weather, calendar, system, news, to-do, notes, photos, world clocks and media controls, in a board you can rearrange.</p></article>
-        <article class="feature"><svg class="ico"><use href="#i-folder"/></svg><h3>Files</h3>
-          <p>A file manager for the real disk: places, breadcrumbs, grid and list views, thumbnails, search, copy and paste, and a Trash you can restore from.</p></article>
-        <article class="feature"><svg class="ico"><use href="#i-activity"/></svg><h3>Task Manager</h3>
-          <p>Ctrl+Shift+Esc: apps and processes with CPU and memory, End task and Force close, and live performance graphs.</p></article>
-        <article class="feature"><svg class="ico"><use href="#i-chip"/></svg><h3>Driver Manager</h3>
-          <p>Finds NVIDIA, AMD and Intel graphics, Wi-Fi (Broadcom too), Bluetooth and sound, and installs the right drivers and firmware.</p></article>
-        <article class="feature"><svg class="ico"><use href="#i-bag"/></svg><h3>PolyMarket</h3>
-          <p>The PolyOS app store: Chrome, Discord, Spotify, Steam, VS Code, LibreOffice, OBS and more, from Debian and Flathub.</p></article>
-        <article class="feature"><svg class="ico"><use href="#i-settings"/></svg><h3>Settings</h3>
-          <p>Display (resolution, refresh rate, graphics), Sound (every device, with the full mixer a click away), Account (your Poly Account, password and PIN), Privacy, Wi-Fi, Personalization, Taskbar and Desktop, Gaming, Vara, Apps (installed, startup and usage) and Storage.</p></article>
-        <article class="feature"><svg class="ico"><use href="#i-camera"/></svg><h3>Camera</h3>
-          <p>Photos and videos from your webcam with a self-timer and mirror, saved to Pictures. It only appears on computers with a camera.</p></article>
-        <article class="feature"><svg class="ico"><use href="#i-chat"/></svg><h3>Vara, the AI agent</h3>
-          <p>Tell it what to build. Vara writes and runs code, makes 3D models, works with ROS 2 robots and Arduino boards, and asks before it changes anything.</p></article>
-        <article class="feature"><svg class="ico"><use href="#i-disk"/></svg><h3>The PolyOS 7 installer</h3>
-          <p>"Cryptic Software presents", the falling pinwheel and the 7, then install on a whole disk, next to Windows, or choose every drive yourself.</p></article>
+      <div class="bento">
+        <article class="card wide reveal"><svg class="ico"><use href="#i-grid"/></svg><h3>A real Start menu</h3>
+          <p>Press the Windows key: search apps, settings and your files, pin what you use, browse All apps A to Z, and pick up recent files. Power, Settings and Files sit at the bottom.</p></article>
+        <article class="card reveal"><svg class="ico"><use href="#i-desktop"/></svg><h3>Taskbar and quick settings</h3>
+          <p>A floating taskbar, <b>^</b> for everything running (even Steam or Discord in the background), and Wi-Fi, Airplane mode, Energy saver and Night light a click away.</p></article>
+        <article class="card reveal"><svg class="ico"><use href="#i-lock"/></svg><h3>Sign in your way</h3>
+          <p>The PolyOS 7 lock screen with a PIN or your password, and a recovery key if you forget it.</p></article>
+        <article class="card reveal"><svg class="ico"><use href="#i-bag"/></svg><h3>PolyMarket</h3>
+          <p>51 trusted apps from Debian and Flathub: Discord, Spotify, Steam, VS Code, OBS and more. Google Chrome comes built in.</p></article>
+        <article class="card reveal"><svg class="ico"><use href="#i-folder"/></svg><h3>Files</h3>
+          <p>Drag and drop, thumbnails, search, a Trash you can restore from, and <i>Set as wallpaper</i> for any picture.</p></article>
+        <article class="card reveal"><svg class="ico"><use href="#i-monitor"/></svg><h3>Screens made easy</h3>
+          <p>Plug in a monitor: Duplicate, Extend or one screen with Win+P, remembered for next time.</p></article>
+        <article class="card wide reveal"><svg class="ico"><use href="#i-settings"/></svg><h3>Settings that make sense</h3>
+          <p>Personalization, your Account and PIN, Apps (installed, startup and usage), Storage, Display, Power (lid and power button), Privacy, Gaming and Updates, all in one place.</p></article>
+        <article class="card reveal"><svg class="ico"><use href="#i-chip"/></svg><h3>Drivers and firmware</h3>
+          <p>Driver Manager finds graphics, Wi-Fi and sound drivers, and firmware updates from your computer's maker.</p></article>
+        <article class="card wide reveal"><svg class="ico"><use href="#i-chat"/></svg><h3>Vara</h3>
+          <p>The PolyOS assistant: ask for an app or a setting, or have it help with code and 3D models, always asking before it changes anything.</p></article>
       </div>
     </section>
 
-    <!-- ---- gallery ------------------------------------------------------------------- -->
-    <section class="section" id="gallery">
-      <div class="section-head">
-        <p class="eyebrow">Gallery</p>
-        <h2>Take the tour</h2>
-        <p>Real screenshots of PolyOS. Click any of them to see it full size.</p>
+    <!-- ---- tour: one screenshot at a time ---------------------------------------------- -->
+    <section class="section" id="tour">
+      <div class="section-head reveal">
+        <p class="eyebrow">Take the tour</p>
+        <h2>See PolyOS, screen by screen</h2>
+        <p>Real screenshots of PolyOS 1.4. Pick a part, then click through; click the big picture to see it full size.</p>
       </div>
-      <div class="filters" role="tablist" aria-label="Filter screenshots">
-        <button role="tab" aria-selected="true" data-filter="all">All</button>
-        <button role="tab" aria-selected="false" data-filter="signin">Sign in</button>
-        <button role="tab" aria-selected="false" data-filter="desktop">Desktop</button>
-        <button role="tab" aria-selected="false" data-filter="apps">Apps</button>
-        <button role="tab" aria-selected="false" data-filter="settings">Settings</button>
-        <button role="tab" aria-selected="false" data-filter="installer">Installer</button>
+      <div class="tour reveal" data-tour>
+        <div class="tour-tabs" role="tablist" aria-label="Parts of PolyOS">
+          <button role="tab" aria-selected="true" data-tour-tab="desktop">Desktop</button>
+          <button role="tab" aria-selected="false" data-tour-tab="apps">Apps</button>
+          <button role="tab" aria-selected="false" data-tour-tab="settings">Settings</button>
+          <button role="tab" aria-selected="false" data-tour-tab="setup">Setup</button>
+          <button role="tab" aria-selected="false" data-tour-tab="signin">Sign in</button>
+        </div>
+        <div class="tour-body">
+        <figure class="tour-view">
+          <div class="tour-screen">
+            <button class="tour-zoom" type="button" aria-label="See this screenshot full size">
+              <img data-tour-img src="screenshots/desktop.jpg" alt="The PolyOS desktop" width="1440" height="900">
+              <span class="tour-zoom-hint"><svg class="ico"><use href="#i-zoom"/></svg>Full size</span>
+            </button>
+            <button class="tour-arrow prev" type="button" aria-label="Previous screenshot"><svg class="ico"><use href="#i-left"/></svg></button>
+            <button class="tour-arrow next" type="button" aria-label="Next screenshot"><svg class="ico"><use href="#i-right"/></svg></button>
+          </div>
+          <figcaption aria-live="polite"><b data-tour-title>Desktop</b><span data-tour-text>The crystal wallpaper, your shortcuts and the floating taskbar.</span><span class="tour-count" data-tour-count>1 / 6</span></figcaption>
+        </figure>
+        <div class="tour-strip" aria-label="Screenshots">
+          <a class="tour-thumb" data-cat="desktop" href="screenshots/desktop.jpg" data-title="Desktop" data-text="The crystal wallpaper, your shortcuts and the floating taskbar."><img loading="lazy" src="screenshots/thumbs/desktop.jpg" alt="Desktop" width="720" height="450"></a>
+          <a class="tour-thumb" data-cat="desktop" href="screenshots/start-menu.jpg" data-title="Start menu" data-text="Search, pinned apps, All apps and your recent files."><img loading="lazy" src="screenshots/thumbs/start-menu.jpg" alt="Start menu" width="720" height="450"></a>
+          <a class="tour-thumb" data-cat="desktop" href="screenshots/quick-settings.jpg" data-title="Quick settings" data-text="Wi-Fi, Airplane mode, Energy saver, Night light, sound and brightness."><img loading="lazy" src="screenshots/thumbs/quick-settings.jpg" alt="Quick settings" width="720" height="450"></a>
+          <a class="tour-thumb" data-cat="desktop" href="screenshots/tray.jpg" data-title="Running apps" data-text="The ^ on the taskbar: open apps, and apps running in the background."><img loading="lazy" src="screenshots/thumbs/tray.jpg" alt="Running apps" width="720" height="450"></a>
+          <a class="tour-thumb" data-cat="desktop" href="screenshots/widgets.jpg" data-title="Widgets" data-text="Win+W: weather, calendar, system, news, to-do and photos."><img loading="lazy" src="screenshots/thumbs/widgets.jpg" alt="Widgets" width="720" height="450"></a>
+          <a class="tour-thumb" data-cat="desktop" href="screenshots/desktop-menu.jpg" data-title="Desktop menu" data-text="Right-click the desktop: add apps, personalize, open Task Manager."><img loading="lazy" src="screenshots/thumbs/desktop-menu.jpg" alt="Desktop menu" width="720" height="450"></a>
+          <a class="tour-thumb" data-cat="apps" href="screenshots/files.jpg" data-title="Files" data-text="Your folders and drives, with drag and drop and a Trash."><img loading="lazy" src="screenshots/thumbs/files.jpg" alt="Files" width="720" height="450"></a>
+          <a class="tour-thumb" data-cat="apps" href="screenshots/polymarket.jpg" data-title="PolyMarket" data-text="51 trusted apps, one click each. Several install one after another."><img loading="lazy" src="screenshots/thumbs/polymarket.jpg" alt="PolyMarket" width="720" height="450"></a>
+          <a class="tour-thumb" data-cat="apps" href="screenshots/task-manager.jpg" data-title="Task Manager" data-text="Ctrl+Shift+Esc: what's running, End task and live performance."><img loading="lazy" src="screenshots/thumbs/task-manager.jpg" alt="Task Manager" width="720" height="450"></a>
+          <a class="tour-thumb" data-cat="apps" href="screenshots/driver-manager.jpg" data-title="Driver Manager" data-text="Your computer's model, its drivers, and firmware from its maker."><img loading="lazy" src="screenshots/thumbs/driver-manager.jpg" alt="Driver Manager" width="720" height="450"></a>
+          <a class="tour-thumb" data-cat="apps" href="screenshots/vara.jpg" data-title="Vara" data-text="The PolyOS assistant, here writing a 3D model and checking it."><img loading="lazy" src="screenshots/thumbs/vara.jpg" alt="Vara" width="720" height="450"></a>
+          <a class="tour-thumb" data-cat="settings" href="screenshots/settings-appearance.jpg" data-title="Personalization" data-text="Dark or light, your accent color and wallpapers."><img loading="lazy" src="screenshots/thumbs/settings-appearance.jpg" alt="Personalization" width="720" height="450"></a>
+          <a class="tour-thumb" data-cat="settings" href="screenshots/settings-account.jpg" data-title="Account" data-text="Your Poly Account, password and PIN, on one page."><img loading="lazy" src="screenshots/thumbs/settings-account.jpg" alt="Account settings" width="720" height="450"></a>
+          <a class="tour-thumb" data-cat="settings" href="screenshots/settings-apps.jpg" data-title="Apps" data-text="Installed apps, startup apps and how long you use each one."><img loading="lazy" src="screenshots/thumbs/settings-apps.jpg" alt="Apps settings" width="720" height="450"></a>
+          <a class="tour-thumb" data-cat="settings" href="screenshots/settings-storage.jpg" data-title="Storage" data-text="How full your drives are, what your folders take, and cleaning up."><img loading="lazy" src="screenshots/thumbs/settings-storage.jpg" alt="Storage settings" width="720" height="450"></a>
+          <a class="tour-thumb" data-cat="settings" href="screenshots/settings-display.jpg" data-title="Display" data-text="Brightness, resolution, refresh rate and more than one screen."><img loading="lazy" src="screenshots/thumbs/settings-display.jpg" alt="Display settings" width="720" height="450"></a>
+          <a class="tour-thumb" data-cat="settings" href="screenshots/settings-power.jpg" data-title="Power &amp; Performance" data-text="Power modes, what closing the lid does, and the hardware check."><img loading="lazy" src="screenshots/thumbs/settings-power.jpg" alt="Power settings" width="720" height="450"></a>
+          <a class="tour-thumb" data-cat="settings" href="screenshots/settings-privacy.jpg" data-title="Privacy &amp; Security" data-text="A security checkup, the firewall and automatic security updates."><img loading="lazy" src="screenshots/thumbs/settings-privacy.jpg" alt="Privacy settings" width="720" height="450"></a>
+          <a class="tour-thumb" data-cat="settings" href="screenshots/settings-updates.jpg" data-title="Updates" data-text="Signed updates on your schedule, downloaded and installed for you."><img loading="lazy" src="screenshots/thumbs/settings-updates.jpg" alt="Update settings" width="720" height="450"></a>
+          <a class="tour-thumb" data-cat="setup" href="screenshots/boot-menu.jpg" data-title="Starting from USB" data-text="The PolyOS boot menu on the USB drive."><img loading="lazy" src="screenshots/thumbs/boot-menu.jpg" alt="Boot menu" width="720" height="450"></a>
+          <a class="tour-thumb" data-cat="setup" href="screenshots/installer-welcome.jpg" data-title="Welcome to PolyOS 7" data-text="The pinwheel and the 7, as in the Scratch setup."><img loading="lazy" src="screenshots/thumbs/installer-welcome.jpg" alt="Welcome" width="720" height="450"></a>
+          <a class="tour-thumb" data-cat="setup" href="screenshots/installer-start.jpg" data-title="It's time to get started" data-text="Install PolyOS 7 on a drive of its own, or try it first."><img loading="lazy" src="screenshots/thumbs/installer-start.jpg" alt="Get started" width="720" height="450"></a>
+          <a class="tour-thumb" data-cat="setup" href="screenshots/installer-check.jpg" data-title="Checking your computer" data-text="The model, processor, memory and graphics, and the drivers it needs."><img loading="lazy" src="screenshots/thumbs/installer-check.jpg" alt="Hardware check" width="720" height="450"></a>
+          <a class="tour-thumb" data-cat="setup" href="screenshots/installer-edition.jpg" data-title="Pick an edition" data-text="Regular, Developer or Gaming."><img loading="lazy" src="screenshots/thumbs/installer-edition.jpg" alt="Editions" width="720" height="450"></a>
+          <a class="tour-thumb" data-cat="setup" href="screenshots/installer-restore.jpg" data-title="Set up like one of your computers" data-text="New in 1.4: copy another computer's settings, edition and apps."><img loading="lazy" src="screenshots/thumbs/installer-restore.jpg" alt="Set up like one of your computers" width="720" height="450"></a>
+          <a class="tour-thumb" data-cat="setup" href="screenshots/installer-account.jpg" data-title="Create your account" data-text="Your name, password, computer name and time zone."><img loading="lazy" src="screenshots/thumbs/installer-account.jpg" alt="Create your account" width="720" height="450"></a>
+          <a class="tour-thumb" data-cat="setup" href="screenshots/installer-drives.jpg" data-title="Where should PolyOS go?" data-text="Pick the drive; setup says exactly what gets replaced."><img loading="lazy" src="screenshots/thumbs/installer-drives.jpg" alt="Choose the drive" width="720" height="450"></a>
+          <a class="tour-thumb" data-cat="setup" href="screenshots/installer-done.jpg" data-title="Installed" data-text="Your recovery key, then restart into PolyOS."><img loading="lazy" src="screenshots/thumbs/installer-done.jpg" alt="Installed" width="720" height="450"></a>
+          <a class="tour-thumb" data-cat="signin" href="screenshots/login.jpg" data-title="Login screen" data-text="The PolyOS 7 design: a stacked clock and tiles over the amethyst crystal."><img loading="lazy" src="screenshots/thumbs/login.jpg" alt="Login screen" width="720" height="450"></a>
+          <a class="tour-thumb" data-cat="signin" href="screenshots/login-password.jpg" data-title="Sign in" data-text="Your PIN or password, and Forgot Password with a recovery key."><img loading="lazy" src="screenshots/thumbs/login-password.jpg" alt="Sign in" width="720" height="450"></a>
+          <a class="tour-thumb" data-cat="signin" href="screenshots/lock.jpg" data-title="Lock screen" data-text="Win+L locks instantly; it also locks before sleep."><img loading="lazy" src="screenshots/thumbs/lock.jpg" alt="Lock screen" width="720" height="450"></a>
+        </div>
+        </div>
       </div>
-      <div class="gallery">
-        <figure data-cat="signin" data-full="screenshots/login.jpg"><img loading="lazy" src="screenshots/thumbs/login.jpg" alt="" width="720" height="450"><figcaption><b>Login screen</b><span>The PolyOS 7 design: stacked clock and tiles over the amethyst crystal.</span></figcaption></figure>
-        <figure data-cat="signin" data-full="screenshots/login-password.jpg"><img loading="lazy" src="screenshots/thumbs/login-password.jpg" alt="" width="720" height="450"><figcaption><b>Sign in</b><span>Your name, "Enter your password", Forgot Password and Next.</span></figcaption></figure>
-        <figure data-cat="signin" data-full="screenshots/lock.jpg"><img loading="lazy" src="screenshots/thumbs/lock.jpg" alt="" width="720" height="450"><figcaption><b>Lock screen</b><span>Appears instantly with Win+L, before sleep, or when the screen turns off.</span></figcaption></figure>
-        <figure data-cat="desktop" data-full="screenshots/desktop.jpg"><img loading="lazy" src="screenshots/thumbs/desktop.jpg" alt="" width="720" height="450"><figcaption><b>Desktop</b><span>The crystal wallpaper, app shortcuts and the capsule dock.</span></figcaption></figure>
-        <figure data-cat="desktop" data-full="screenshots/home-menu.jpg"><img loading="lazy" src="screenshots/thumbs/home-menu.jpg" alt="" width="720" height="450"><figcaption><b>Home Menu</b><span>Calendar, Ask Vara, Run CMD, sliders and your apps.</span></figcaption></figure>
-        <figure data-cat="desktop" data-full="screenshots/launcher.jpg"><img loading="lazy" src="screenshots/thumbs/launcher.jpg" alt="" width="720" height="450"><figcaption><b>App launcher</b><span>Every app, with search and Pin Apps. Right-click to add one to the desktop.</span></figcaption></figure>
-        <figure data-cat="desktop" data-full="screenshots/widgets.jpg"><img loading="lazy" src="screenshots/thumbs/widgets.jpg" alt="" width="720" height="450"><figcaption><b>Widgets</b><span>Weather, calendar, system, news, to-do, photos and more.</span></figcaption></figure>
-        <figure data-cat="desktop" data-full="screenshots/quick-settings.jpg"><img loading="lazy" src="screenshots/thumbs/quick-settings.jpg" alt="" width="720" height="450"><figcaption><b>Quick settings</b><span>Wi-Fi, sound, brightness and battery, from the dock.</span></figcaption></figure>
-        <figure data-cat="desktop" data-full="screenshots/desktop-menu.jpg"><img loading="lazy" src="screenshots/thumbs/desktop-menu.jpg" alt="" width="720" height="450"><figcaption><b>Desktop menu</b><span>Add apps to the desktop, taskbar settings, personalize and more.</span></figcaption></figure>
-        <figure data-cat="apps" data-full="screenshots/vara.jpg"><img loading="lazy" src="screenshots/thumbs/vara.jpg" alt="" width="720" height="450"><figcaption><b>Vara at work</b><span>Asked for a part with a hole, Vara loads its OpenSCAD skill, looks around and writes the model.</span></figcaption></figure>
-        <figure data-cat="apps" data-full="screenshots/vara-approval.jpg"><img loading="lazy" src="screenshots/thumbs/vara-approval.jpg" alt="" width="720" height="450"><figcaption><b>You stay in charge</b><span>Before Vara changes a file or runs a program, you see exactly what and choose Allow or Deny.</span></figcaption></figure>
-        <figure data-cat="apps" data-full="screenshots/files.jpg"><img loading="lazy" src="screenshots/thumbs/files.jpg" alt="" width="720" height="450"><figcaption><b>Files</b><span>Your folders, drives and Trash.</span></figcaption></figure>
-        <figure data-cat="apps" data-full="screenshots/task-manager.jpg"><img loading="lazy" src="screenshots/thumbs/task-manager.jpg" alt="" width="720" height="450"><figcaption><b>Task Manager</b><span>What's running, End task and Force close.</span></figcaption></figure>
-        <figure data-cat="apps" data-full="screenshots/polymarket.jpg"><img loading="lazy" src="screenshots/thumbs/polymarket.jpg" alt="" width="720" height="450"><figcaption><b>PolyMarket</b><span>Trusted apps from Debian and Flathub, one click each.</span></figcaption></figure>
-        <figure data-cat="apps" data-full="screenshots/polymarket-making.jpg"><img loading="lazy" src="screenshots/thumbs/polymarket-making.jpg" alt="" width="720" height="450"><figcaption><b>3D and making</b><span>OpenSCAD, FreeCAD, KiCad, PrusaSlicer, Cura and the Arduino IDE.</span></figcaption></figure>
-        <figure data-cat="apps" data-full="screenshots/driver-manager.jpg"><img loading="lazy" src="screenshots/thumbs/driver-manager.jpg" alt="" width="720" height="450"><figcaption><b>Driver Manager</b><span>The right graphics, Wi-Fi and firmware for your hardware.</span></figcaption></figure>
-        <figure data-cat="settings" data-full="screenshots/settings-appearance.jpg"><img loading="lazy" src="screenshots/thumbs/settings-appearance.jpg" alt="" width="720" height="450"><figcaption><b>Personalization</b><span>Dark or light, accent color, desktop and lock screen wallpapers.</span></figcaption></figure>
-        <figure data-cat="settings" data-full="screenshots/settings-taskbar.jpg"><img loading="lazy" src="screenshots/thumbs/settings-taskbar.jpg" alt="" width="720" height="450"><figcaption><b>Taskbar and Desktop</b><span>Floating or edge to edge, alignment, auto-hide, pinned apps.</span></figcaption></figure>
-        <figure data-cat="settings" data-full="screenshots/settings-power.jpg"><img loading="lazy" src="screenshots/thumbs/settings-power.jpg" alt="" width="720" height="450"><figcaption><b>Power and Performance</b><span>Power saver, Balanced, Performance and Maximum.</span></figcaption></figure>
-        <figure data-cat="settings" data-full="screenshots/settings-privacy.jpg"><img loading="lazy" src="screenshots/thumbs/settings-privacy.jpg" alt="" width="720" height="450"><figcaption><b>Privacy and Security</b><span>Security checkup, firewall, updates, camera and microphone access.</span></figcaption></figure>
-        <figure data-cat="settings" data-full="screenshots/settings-gaming.jpg"><img loading="lazy" src="screenshots/thumbs/settings-gaming.jpg" alt="" width="720" height="450"><figcaption><b>Gaming</b><span>Game Mode, gaming apps and cloud gaming.</span></figcaption></figure>
-        <figure data-cat="settings" data-full="screenshots/settings-developer.jpg"><img loading="lazy" src="screenshots/thumbs/settings-developer.jpg" alt="" width="720" height="450"><figcaption><b>Developer</b><span>Change PolyOS's own interface, and get coding tools.</span></figcaption></figure>
-        <figure data-cat="settings" data-full="screenshots/settings-vara.jpg"><img loading="lazy" src="screenshots/thumbs/settings-vara.jpg" alt="" width="720" height="450"><figcaption><b>Vara</b><span>Your AI provider, workspace folder, when Vara asks first, its skills and what it remembers.</span></figcaption></figure>
-        <figure data-cat="settings" data-full="screenshots/settings-about.jpg"><img loading="lazy" src="screenshots/thumbs/settings-about.jpg" alt="" width="720" height="450"><figcaption><b>About PolyOS</b><span>Your computer, tools and credits.</span></figcaption></figure>
-        <figure data-cat="installer" data-full="screenshots/boot-menu.jpg"><img loading="lazy" src="screenshots/thumbs/boot-menu.jpg" alt="" width="720" height="450"><figcaption><b>Starting from USB</b><span>The PolyOS boot menu on the USB drive, on PCs and ARM64 computers alike.</span></figcaption></figure>
-        <figure data-cat="installer" data-full="screenshots/installer-welcome.jpg"><img loading="lazy" src="screenshots/thumbs/installer-welcome.jpg" alt="" width="720" height="450"><figcaption><b>Welcome to PolyOS 7</b><span>The pinwheel and the 7, as in the Scratch setup.</span></figcaption></figure>
-        <figure data-cat="installer" data-full="screenshots/installer-start.jpg"><img loading="lazy" src="screenshots/thumbs/installer-start.jpg" alt="" width="720" height="450"><figcaption><b>It's time to get started</b><span>Install PolyOS 7 on a drive of its own, or try it first.</span></figcaption></figure>
-        <figure data-cat="installer" data-full="screenshots/installer-edition.jpg"><img loading="lazy" src="screenshots/thumbs/installer-edition.jpg" alt="" width="720" height="450"><figcaption><b>Pick an edition</b><span>Regular, Developer or Gaming.</span></figcaption></figure>
-        <figure data-cat="installer" data-full="screenshots/installer-account.jpg"><img loading="lazy" src="screenshots/thumbs/installer-account.jpg" alt="" width="720" height="450"><figcaption><b>Create your account</b><span>Name, password, computer name and time zone.</span></figcaption></figure>
-        <figure data-cat="installer" data-full="screenshots/installer-appearance.jpg"><img loading="lazy" src="screenshots/thumbs/installer-appearance.jpg" alt="" width="720" height="450"><figcaption><b>Personalization</b><span>Dark or light, and your accent color.</span></figcaption></figure>
-        <figure data-cat="installer" data-full="screenshots/installer-drives.jpg"><img loading="lazy" src="screenshots/thumbs/installer-drives.jpg" alt="" width="720" height="450"><figcaption><b>Where do you want to install PolyOS?</b><span>Every drive, partition and unallocated space, with Delete and New, like Windows Setup.</span></figcaption></figure>
-        <figure data-cat="installer" data-full="screenshots/installer-custom.jpg"><img loading="lazy" src="screenshots/thumbs/installer-custom.jpg" alt="" width="720" height="450"><figcaption><b>Advanced setup</b><span>Keep Windows, reuse a drive for your files, erase another for PolyOS.</span></figcaption></figure>
-        <figure data-cat="installer" data-full="screenshots/installer-done.jpg"><img loading="lazy" src="screenshots/thumbs/installer-done.jpg" alt="" width="720" height="450"><figcaption><b>Installed</b><span>Your recovery key, then “Please remove the USB drive now.”</span></figcaption></figure>
-        <figure data-cat="installer" data-full="screenshots/installer-progress.jpg"><img loading="lazy" src="screenshots/thumbs/installer-progress.jpg" alt="" width="720" height="450"><figcaption><b>Installing</b><span>A few minutes later, PolyOS is on your disk.</span></figcaption></figure>
+    </section>
+
+    <!-- ---- what's new ---------------------------------------------------------------- -->
+    <section class="section split" id="whats-new">
+      <div class="reveal">
+        <p class="eyebrow">What's new in 1.4</p>
+        <h2>A new computer, set up like your old one</h2>
+        <p>Install PolyOS on a new computer, connect your Poly Account, and pick one of your other computers.
+          The new one gets its settings, edition and apps, like cloning a PC. Files stay where they are.</p>
+        <ul class="ticks">
+          <li><svg class="ico"><use href="#i-check"/></svg><span><b>Settings</b>: taskbar, pinned apps, wallpaper, theme, clock and power options</span></li>
+          <li><svg class="ico"><use href="#i-check"/></svg><span><b>Edition</b>: Regular, Developer or Gaming, with its apps</span></li>
+          <li><svg class="ico"><use href="#i-check"/></svg><span><b>PolyMarket apps</b>: they install by themselves once the new computer is online</span></li>
+          <li><svg class="ico"><use href="#i-check"/></svg><span><b>A fresh install</b>: PolyOS gets a drive of its own, and setup says exactly what gets replaced</span></li>
+        </ul>
+        <p class="note">No files or passwords are copied. Each computer's backup (with Poly Sync on) holds only its settings, edition and app list.
+          <a href="/changelog">Every release</a></p>
       </div>
+      <figure class="frame tilt reveal"><img loading="lazy" src="screenshots/installer-restore.jpg" alt="Set up like one of your computers: Gaming PC, Sam's laptop, or Start fresh" width="1440" height="900"></figure>
     </section>
 
     <!-- ---- editions ------------------------------------------------------------------ -->
     <section class="section" id="editions">
-      <div class="section-head">
+      <div class="section-head reveal">
         <p class="eyebrow">Editions</p>
         <h2>One PolyOS, three ways to use it</h2>
-        <p>Pick an edition while installing. Its apps arrive the first time you sign in, and you can add the others any time in Settings.</p>
+        <p>Pick an edition while installing. Its apps arrive by themselves, and you can add the others any time in Settings.</p>
       </div>
       <div class="editions">
-        <article class="edition">
+        <article class="edition reveal">
           <span class="badge"><svg class="ico"><use href="#i-star"/></svg></span>
           <h3>Regular</h3>
           <p>Everything most people need: the PolyOS desktop, Google Chrome, Files, Camera, widgets and PolyMarket.</p>
-          <ul><li>Crystal desktop and dock</li><li>51 trusted apps one click away</li><li>Firewall and security updates on</li></ul>
+          <ul><li>Crystal desktop and Start menu</li><li>51 trusted apps one click away</li><li>Firewall and security updates on</li></ul>
         </article>
-        <article class="edition">
+        <article class="edition reveal">
           <span class="badge"><svg class="ico"><use href="#i-code"/></svg></span>
           <h3>Developer</h3>
-          <p>Change PolyOS itself. Any file you put in your interface folder replaces PolyOS's built-in one, on every screen.</p>
-          <ul><li><code>user.css</code> restyles everything</li><li>Inspect Element on PolyOS screens</li><li>Git, Python, Node.js, VS Code</li><li><code>polyos-ctl dev off</code> undoes a broken change</li></ul>
+          <p>Change PolyOS itself: any file you put in your interface folder replaces PolyOS's built-in one.</p>
+          <ul><li><code>user.css</code> restyles everything</li><li>Inspect Element on PolyOS screens</li><li>Git, Python, Node.js, VS Code</li></ul>
         </article>
-        <article class="edition featured">
+        <article class="edition featured reveal">
           <span class="badge"><svg class="ico"><use href="#i-gamepad"/></svg></span>
           <h3>Gaming</h3>
           <p>Set up for play: Steam, Windows games with Wine, other launchers, cloud gaming and a Game Mode.</p>
-          <ul><li>Steam, Bottles (Wine), Heroic, Lutris, ProtonUp-Qt</li><li>GeForce NOW, Xbox Cloud Gaming, Luna, Boosteroid</li><li>Game Mode: full speed, PolyOS steps back while you play</li></ul>
+          <ul><li>Steam, Bottles, Heroic, Lutris</li><li>GeForce NOW, Xbox Cloud Gaming</li><li>Game Mode: full speed while you play</li></ul>
         </article>
       </div>
     </section>
 
-    <!-- ---- Vara ------------------------------------------------------------------------- -->
-    <section class="section split" id="vara">
-      <div>
-        <p class="eyebrow">Vara</p>
-        <h2>An AI agent for code, 3D and robots</h2>
-        <p>Vara works like a coding agent that lives in your desktop. Tell it what you want; it plans, looks at your
-          files, uses the right tools, checks the result and tells you what it did.</p>
-        <dl class="modes">
-          <dt><svg class="ico"><use href="#i-code"/></svg> Code</dt><dd>Reads, writes and edits files, runs commands and tests, and uses git in your projects folder.</dd>
-          <dt><svg class="ico"><use href="#i-cube"/></svg> 3D models</dt><dd>Writes OpenSCAD and Blender scripts, renders STL files, checks their size and prepares them for printing.</dd>
-          <dt><svg class="ico"><use href="#i-robot"/></svg> Robots and boards</dt><dd>Inspects ROS 2 topics and nodes, builds packages, and compiles and uploads Arduino and ESP32 sketches.</dd>
-          <dt><svg class="ico"><use href="#i-sparkle"/></svg> Skills and memory</dt><dd>Follows step-by-step skills (add your own as Markdown) and remembers your board, printer and projects.</dd>
-          <dt><svg class="ico"><use href="#i-shield"/></svg> Asks first</dt><dd>Looking is free; changing files, running programs and moving hardware wait for your Allow. SSH keys and passwords are off limits.</dd>
-        </dl>
-        <p class="note">Works with Ollama Cloud, OpenAI, NVIDIA, Claude or any OpenAI-compatible service.</p>
-      </div>
-      <figure class="frame tilt"><img loading="lazy" src="screenshots/vara-approval.jpg" alt="Vara asking for approval before writing an OpenSCAD file" width="1440" height="900"></figure>
-    </section>
-
-    <!-- ---- installer + security ------------------------------------------------------- -->
-    <section class="section split">
-      <div>
-        <p class="eyebrow">The installer</p>
-        <h2>Your drives, your choice</h2>
-        <p>The PolyOS 7 setup gives PolyOS a drive of its own:</p>
-        <dl class="modes">
-          <dt>Install PolyOS 7</dt><dd>Choose the drive. Setup shows what's on it first (Windows, say), and after you confirm, PolyOS replaces everything on it with a clean install.</dd>
-          <dt>Try PolyOS first</dt><dd>Look around from the USB drive without changing anything, and install when you're ready.</dd>
-        </dl>
-      </div>
-      <figure class="frame tilt"><img loading="lazy" src="screenshots/installer-drives.jpg" alt="Where do you want to install PolyOS? Drives and partitions with Delete and New" width="1440" height="900"></figure>
-    </section>
-
-    <section class="section">
-      <div class="section-head">
-        <p class="eyebrow">Safe and fast</p>
-        <h2>Secure and fast from the start</h2>
-      </div>
-      <div class="features compact">
-        <article class="feature"><svg class="ico"><use href="#i-shield"/></svg><h3>Firewall on</h3><p>Other computers can't connect in; your apps still reach the internet.</p></article>
-        <article class="feature"><svg class="ico"><use href="#i-shield"/></svg><h3>Security updates</h3><p>Debian's security fixes install themselves in the background.</p></article>
-        <article class="feature"><svg class="ico"><use href="#i-lock"/></svg><h3>Guessing protection</h3><p>After 5 wrong passwords the lock screen makes you wait, longer each time.</p></article>
-        <article class="feature"><svg class="ico"><use href="#i-shield"/></svg><h3>Security checkup</h3><p>Firewall, updates, lock screen, recovery key, AppArmor and Secure Boot at a glance.</p></article>
-        <article class="feature"><svg class="ico"><use href="#i-bolt"/></svg><h3>Power modes</h3><p>Power saver, Balanced, Performance and Maximum, with screen-off and sleep timers.</p></article>
-        <article class="feature"><svg class="ico"><use href="#i-bolt"/></svg><h3>Tuned for speed</h3><p>Compressed RAM swap, SSD trimming, a faster startup, and full-screen games skip the compositor.</p></article>
-      </div>
-    </section>
-
-    <!-- ---- under the hood ------------------------------------------------------------ -->
+    <!-- ---- safe and fast + how it's built ---------------------------------------------- -->
     <section class="section split reverse">
-      <div>
+      <div class="reveal">
         <p class="eyebrow">Under the hood</p>
-        <h2>How it's built</h2>
-        <p>Debian provides the kernel, drivers, Wi-Fi, audio and apps. PolyOS provides everything you see.
-          The interface is plain HTML, CSS and JavaScript, running in WebKitGTK windows that a Python shell places on an Openbox desktop.</p>
-        <p>Only one small, tested helper ever runs as administrator, and it only installs what the PolyMarket catalog allows.</p>
+        <h2>Safe, fast, and built on Debian</h2>
+        <p>Debian provides the kernel, drivers, Wi-Fi, audio and apps. PolyOS provides everything you see:
+          plain HTML, CSS and JavaScript in WebKit windows, placed by a Python shell on an Openbox desktop.</p>
+        <ul class="ticks">
+          <li><svg class="ico"><use href="#i-shield"/></svg><span><b>Firewall on</b>, and Debian's security fixes install by themselves</span></li>
+          <li><svg class="ico"><use href="#i-lock"/></svg><span><b>Signed updates</b>: PolyOS refuses an update whose signature doesn't match</span></li>
+          <li><svg class="ico"><use href="#i-shield"/></svg><span><b>One small administrator helper</b>, which never keeps your password</span></li>
+          <li><svg class="ico"><use href="#i-bolt"/></svg><span><b>Tuned for speed</b>: compressed memory, SSD trimming, a lighter mode for older PCs</span></li>
+        </ul>
       </div>
-      <div class="stack" aria-label="PolyOS architecture">
-        <div class="layer accent"><b>PolyOS interface</b><span>Desktop, dock, menus, Settings, Files, Task Manager, PolyMarket, installer</span></div>
+      <div class="stack reveal" aria-label="PolyOS architecture">
+        <div class="layer accent"><b>PolyOS interface</b><span>Desktop, Start, Settings, Files, Task Manager, PolyMarket, setup</span></div>
         <div class="layer"><b>polyos-shell</b><span>Python + GTK + WebKit, a private API on your own computer</span></div>
         <div class="layer"><b>Openbox + picom</b><span>Windows, blur, shadows, rounded corners</span></div>
         <div class="layer"><b>LightDM</b><span>The PolyOS login screen</span></div>
@@ -270,33 +262,13 @@
       </div>
     </section>
 
-    <!-- ---- what's new --------------------------------------------------------------- -->
-    <section class="section" id="whats-new">
-      <div class="section-head">
-        <p class="eyebrow">What's new</p>
-        <h2>PolyOS 1.3: the cleaned-up PolyOS 7</h2>
-        <p>Everything tidied up to feel like a finished system: a Windows-style Start menu, Google Chrome, easier screens, dual boot that just works, and PIN sign-in.</p>
-      </div>
-      <div class="news">
-        <article><h3>A real Start menu</h3><p>Search apps, settings and files; pinned apps, All apps A to Z, and your recent files. Only the apps you need, with no technical clutter.</p></article>
-        <article><h3>Google Chrome built in</h3><p>Chrome is the browser, with its updates. Install several PolyMarket apps at once: they queue up and install in turn.</p></article>
-        <article><h3>Screens made easy</h3><p>Plug in a monitor and it just works: Duplicate, Extend or one screen with Win+P, remembered for next time, the desktop on every screen.</p></article>
-        <article><h3>Dual boot that works</h3><p>Setup spots Windows' Fast Startup before it can cause a repair loop. PolyOS starts straight away, with Restart to Windows in Start.</p></article>
-        <article><h3>Sign in with a PIN</h3><p>A 4 to 6 digit PIN for the sign-in and lock screens, or your Poly Account password. Installing still asks for the real password.</p></article>
-        <article><h3>More in Settings</h3><p>Storage, app usage, lid and power button, night light, airplane mode, energy saver, and firmware updates from your computer's maker.</p></article>
-      </div>
-      <div class="news-head" style="margin-top:28px"><span class="news-tag">1.1</span><p class="muted" style="margin:0;color:var(--text-2)">Set up once: everything is asked before installing, and PolyOS starts straight to your desktop.</p></div>
-      <div class="news-head" style="margin-top:28px"><span class="news-tag">1.0</span><p class="muted" style="margin:0;color:var(--text-2)">Signed updates on your schedule, an optional Poly Account with sync and device management, and a new website.</p></div>
-      <div class="news-head" style="margin-top:28px"><span class="news-tag">0.8</span><p class="muted" style="margin:0;color:var(--text-2)">Dual boot with your own partition and BitLocker help, touchscreen and camera drivers, a model-aware hardware check, and a themed boot menu.</p></div>
-    </section>
-
-    <!-- ---- install ------------------------------------------------------------------- -->
+    <!-- ---- download ------------------------------------------------------------------- -->
     <section class="section" id="install">
-      <div class="section-head">
+      <div class="section-head reveal">
         <p class="eyebrow">Try it</p>
         <h2>Get PolyOS on your computer</h2>
       </div>
-      <div class="download" id="download">
+      <div class="download reveal" id="download">
         <img class="dl-logo" src="assets/logo-white.svg" alt="" width="84" height="84">
         <div class="dl-main">
           <h3>PolyOS 7 <span class="dl-version" data-release-version></span></h3>
@@ -308,12 +280,12 @@
               <svg class="ico"><use href="#i-download"/></svg>Download for ARM64</a>
           </div>
           <p class="dl-which"><b>Which one?</b> Almost every Windows PC and laptop: <b>PC (Intel/AMD)</b>.
-            Apple Silicon Macs (in UTM, Parallels or VMware Fusion), other ARM64 virtual machines and ARM64
-            computers with UEFI firmware: <b>ARM64</b>.</p>
+            Apple Silicon Macs (in UTM, Parallels or VMware Fusion) and ARM64 computers with UEFI: <b>ARM64</b>.</p>
           <p class="dl-fresh"><svg class="ico"><use href="#i-info"/></svg><span><b>A fresh install.</b> PolyOS installs on a whole drive and replaces
             everything on the drive you choose, including Windows if it's there. Dual boot next to Windows isn't part of this download.</span></p>
-          <p class="dl-note" data-release-note>Always the newest release. Clicking a button starts the download and shows you how to install.</p>
-          <p class="dl-links"><a href="download/checksums" data-release-sums>SHA256 checksums</a></p>
+          <p class="dl-note" data-release-note>Always the newest release. Clicking a button starts the download and shows you how to install.
+            By downloading you accept the <a href="/disclaimer">disclaimer</a>.</p>
+          <p class="dl-links"><a href="download/checksums" data-release-sums>SHA256 checksums</a> · <a href="/install">Install guide</a></p>
         </div>
         <ul class="dl-needs" aria-label="What you need">
           <li><b>A 64-bit computer</b><span>Intel/AMD PC (UEFI or BIOS), or ARM64 with UEFI</span></li>
@@ -323,76 +295,115 @@
         </ul>
       </div>
       <ol class="steps">
-        <li><b>Download the ISO</b><span>The buttons above always have the newest PolyOS release, for PCs and for ARM64 (about 2 GB).</span></li>
-        <li><b>Write it to a USB drive</b><span>Use balenaEtcher or Rufus (DD mode). Or try it first in a virtual machine (VirtualBox, or UTM on a Mac) with 4 GB of RAM.</span></li>
-        <li><b>Start from the USB</b><span>Pick the USB drive in your computer's boot menu. PolyOS starts live, so nothing changes until you install.</span></li>
-        <li><b>Install PolyOS 7</b><span>Choose the drive (everything on it is replaced), pick your edition, and restart when it's done.</span></li>
+        <li class="reveal"><b>Download the ISO</b><span>About 2 GB, always the newest release.</span></li>
+        <li class="reveal"><b>Write it to a USB drive</b><span>With balenaEtcher, or Rufus in DD mode. Or try it in a virtual machine first.</span></li>
+        <li class="reveal"><b>Start from the USB</b><span>Pick it in your computer's boot menu. Nothing changes until you install.</span></li>
+        <li class="reveal"><b>Install PolyOS 7</b><span>Choose the drive and your edition, then restart when it's done.</span></li>
       </ol>
-      <p class="note">Step by step, with boot menu keys for every brand and fixes for common problems:
-        <a href="install.html"><b>the install guide</b></a>.</p>
-      <p class="note">Just want to look around? Anyone with Python can preview the whole interface in a browser:
-        <code>python main.py dev</code></p>
+    </section>
+
+    <!-- ---- FAQ ------------------------------------------------------------------------- -->
+    <section class="section" id="faq">
+      <div class="section-head reveal">
+        <p class="eyebrow">Questions</p>
+        <h2>Good to know before you install</h2>
+      </div>
+      <div class="faq-list">
+        <details class="faq reveal"><summary>Is PolyOS free?</summary>
+          <p>Yes. PolyOS is free and open source (GNU GPL v3 or later). There's nothing to buy and no ads.</p></details>
+        <details class="faq reveal"><summary>Will installing erase my computer?</summary>
+          <p>It replaces everything on the drive you choose, including Windows if it's on that drive. Back up your files first,
+            or try PolyOS from the USB drive (nothing changes until you click Install) or in a virtual machine.</p></details>
+        <details class="faq reveal"><summary>Can I keep Windows next to PolyOS?</summary>
+          <p>Not with this download: it's a fresh install on a drive of its own. If your computer has a second drive, you can install PolyOS
+            there and keep Windows on the first one, choosing between them in your computer's boot menu.</p></details>
+        <details class="faq reveal"><summary>Do I need a Poly Account?</summary>
+          <p>No. PolyOS works fully without one and updates itself either way. An account adds sync, device management, account recovery and,
+            new in 1.4, setting up a new computer like one of your others.</p></details>
+        <details class="faq reveal"><summary>How do updates work?</summary>
+          <p>Settings › Updates downloads and installs new versions on your schedule. Every update is signed, and PolyOS refuses one whose
+            signature or checksums don't match.</p></details>
+        <details class="faq reveal"><summary>Will my Wi-Fi, graphics and games work?</summary>
+          <p>Most hardware works out of the box on Debian 13. Driver Manager installs NVIDIA, Broadcom Wi-Fi and other drivers and firmware,
+            and the Gaming edition sets up Steam, Wine and cloud gaming.</p></details>
+        <details class="faq reveal"><summary>Is this the official PolyOS?</summary>
+          <p>PolyOS was created in Scratch by PIXAPoLY Software; this Debian edition is made by Cryptic Software with the team's blessing.
+            It isn't affiliated with the Scratch Foundation, Debian or Microsoft. See the <a href="/disclaimer">disclaimer</a>.</p></details>
+        <details class="faq reveal"><summary>Where do I get help?</summary>
+          <p>The <a href="/install">install guide</a> and <a href="/docs">documentation</a> cover most things; for anything else, write to us from
+            <a href="/support">Help &amp; Support</a>.</p></details>
+      </div>
     </section>
 
     <!-- ---- timeline ------------------------------------------------------------------ -->
     <section class="section" id="timeline">
-      <div class="section-head">
+      <div class="section-head reveal">
         <p class="eyebrow">Timeline</p>
         <h2>How we got here</h2>
       </div>
       <ol class="timeline">
-        <li><time>Sep 24, 2026</time><h3>PolyOS 7 comes to Debian</h3>
-          <p>The desktop shell: capsule dock, Home Menu, full-screen launcher, Files, Settings, Ask Vara, the login screen, the boot splash and a live USB built on GitHub.</p></li>
-        <li><time>Sep 24, 2026</time><h3>The installer and the core apps</h3>
-          <p>The PolyOS 7 setup with the "Cryptic Software presents" intro, Install and Dual boot. Task Manager, Driver Manager, PolyMarket, dark and light mode.</p></li>
-        <li><time>Sep 24, 2026</time><h3>Polish</h3>
-          <p>The Windows key opens and closes the Home Menu; the live USB keeps its install card on the desktop.</p></li>
-        <li><time>Sep 24, 2026</time><h3>Lock screen, recovery keys and widgets</h3>
-          <p>An instant lock screen, "Forgot password" with a recovery key, the widgets board, and a faster restart after installing.</p></li>
-        <li><time>Sep 25, 2026</time><h3>The PolyOS 7 look, everywhere</h3>
-          <p>Login and lock screens redrawn from the Scratch original, the crystal wallpapers, the Camera app, desktop shortcuts, and new Taskbar, Power and Privacy settings.</p></li>
-        <li><time>Sep 25, 2026</time><h3>Editions, custom installs and security</h3>
-          <p>Regular, Developer and Gaming editions, choosing drives and partitions while installing, firewall and security updates on by default, and speed tuning.</p></li>
-        <li><time>Sep 25, 2026</time><h3>Downloads for PCs and ARM64</h3>
-          <p>Download buttons right on this site, with an install guide, and a second ISO for ARM64 computers and Apple Silicon Macs.</p></li>
-        <li><time>Sep 25, 2026</time><h3>Vara becomes an agent</h3>
-          <p>Vara now builds things: code, OpenSCAD and Blender models, ROS 2 and Arduino, with skills, memory and your approval for every change. Plus real app icons everywhere, a PolyOS boot menu, and ARM64 USB drives that start on UEFI computers.</p></li>
-        <li><time>Sep 26, 2026</time><h3>PolyOS 0.7: Settings grow up</h3>
-          <p>Display and Sound controls, the Apps page, true full screen, the first-start hardware check with a light mode, a Windows Setup style drive list, and Claude and NVIDIA for Vara.</p></li>
-        <li><time>Sep 26, 2026</time><h3>PolyOS 0.8: updates without a USB drive</h3>
-          <p>Online updates from Settings, BitLocker help and your own partition for dual boot, touchscreen and camera drivers, a model-aware hardware check, and a themed boot menu.</p></li>
-        <li><time>Sep 26, 2026</time><h3>PolyOS 0.9: Poly Account and signed updates</h3>
-          <p>An optional Poly Account with device management, recovery and sync; updates on your schedule, signed by Poly; and a new website.</p></li>
-        <li><time>Sep 26, 2026</time><h3>PolyOS 1.0: the first full release</h3>
-          <p>Everything from 0.9 with a friendlier Poly Account sign-in in Settings, release notes in Settings › Updates, and polish throughout.</p></li>
-        <li><time>Sep 26, 2026</time><h3>PolyOS 1.1: set up once</h3>
-          <p>Everything is asked before installing, so PolyOS starts straight to your desktop; drivers and apps install by themselves, and restarting after installing no longer freezes.</p></li>
-        <li><time>Sep 27, 2026</time><h3>PolyOS 1.3: the cleaned-up PolyOS 7</h3>
-          <p>A Windows-style Start menu, Google Chrome, easy multiple screens, dual boot without repair loops, PIN sign-in, and Storage, Usage and firmware updates in Settings.</p></li>
+        <li class="reveal"><time>Sep 27, 2026</time><h3>PolyOS 1.4: set up like one of your computers</h3>
+          <p>Copy another computer's settings, edition and apps while installing, and a fresh install on a drive of its own.</p></li>
+        <li class="reveal"><time>Sep 27, 2026</time><h3>PolyOS 1.3: the cleaned-up PolyOS 7</h3>
+          <p>A Windows-style Start menu, Google Chrome, easy multiple screens, PIN sign-in, and Storage, Usage and firmware updates in Settings.</p></li>
+        <li class="reveal"><time>Sep 26, 2026</time><h3>PolyOS 1.1: set up once</h3>
+          <p>Everything is asked before installing, so PolyOS starts straight to your desktop.</p></li>
+        <li class="reveal"><time>Sep 26, 2026</time><h3>PolyOS 1.0: the first full release</h3>
+          <p>Signed updates on your schedule, an optional Poly Account, and release notes in Settings › Updates.</p></li>
       </ol>
+      <details class="more">
+        <summary>Show the whole story</summary>
+        <ol class="timeline">
+          <li><time>Sep 26, 2026</time><h3>PolyOS 0.9: Poly Account and signed updates</h3>
+            <p>An optional Poly Account with device management, recovery and sync; updates signed by Poly; and a new website.</p></li>
+          <li><time>Sep 26, 2026</time><h3>PolyOS 0.8: updates without a USB drive</h3>
+            <p>Online updates from Settings, touchscreen and camera drivers, a model-aware hardware check, and a themed boot menu.</p></li>
+          <li><time>Sep 26, 2026</time><h3>PolyOS 0.7: Settings grow up</h3>
+            <p>Display and Sound controls, the Apps page, true full screen, the first-start hardware check with a light mode, and a Windows Setup style drive list.</p></li>
+          <li><time>Sep 25, 2026</time><h3>Vara becomes an agent</h3>
+            <p>Code, OpenSCAD and Blender models, ROS 2 and Arduino, with your approval for every change; real app icons and ARM64 USB drives.</p></li>
+          <li><time>Sep 25, 2026</time><h3>Downloads for PCs and ARM64</h3>
+            <p>Download buttons right on this site, an install guide, and a second ISO for ARM64 computers and Apple Silicon Macs.</p></li>
+          <li><time>Sep 25, 2026</time><h3>Editions and security</h3>
+            <p>Regular, Developer and Gaming editions, firewall and security updates on by default, and speed tuning.</p></li>
+          <li><time>Sep 25, 2026</time><h3>The PolyOS 7 look, everywhere</h3>
+            <p>Login and lock screens redrawn from the Scratch original, the crystal wallpapers, the Camera app and desktop shortcuts.</p></li>
+          <li><time>Sep 24, 2026</time><h3>PolyOS 7 comes to Debian</h3>
+            <p>The desktop shell, Files, Settings, the installer with its "Cryptic Software presents" intro, and a live USB built on GitHub.</p></li>
+        </ol>
+      </details>
     </section>
 
-    <!-- ---- credits ------------------------------------------------------------------- -->
-    <section class="section credits" id="credits">
+    <!-- ---- credits + disclaimer --------------------------------------------------------- -->
+    <section class="section credits reveal" id="credits">
       <img src="assets/logo-white.svg" alt="" width="56" height="56">
       <h2>Credits</h2>
-      <p>PolyOS was created in Scratch by <b>PIXAPoLY Software</b> team
+      <p>PolyOS was created in Scratch by <b>PIXAPoLY Software</b>
         (<a href="https://scratch.mit.edu/users/PolyOS/">scratch.mit.edu/users/PolyOS</a>). This edition is presented by <b>Cryptic Software</b>, with the team's blessing.</p>
-      <p class="small">PolyOS for Debian is free software under the GNU GPL v3 or later. The PolyOS logo, colors and PIXAPoLY artwork come from the Scratch project (CC BY-SA 2.0).
-        The Crystal and Amethyst wallpapers in the screenshots are third-party photos used by PolyOS 7.
-        The Poppins font is under the SIL Open Font License. "Scratch" is a trademark of the Scratch Foundation; PolyOS isn't affiliated with or sponsored by the Scratch Foundation or Debian.</p>
+      <div class="disclaimer-box">
+        <svg class="ico"><use href="#i-warn"/></svg>
+        <p><b>Disclaimer.</b> PolyOS 7 for Debian is an independent project, provided as is, without any warranty. Installing it replaces
+          everything on the drive you choose: back up first. It isn't affiliated with or endorsed by the Scratch Foundation, Debian, Microsoft or
+          any app maker named here; their names and trademarks belong to them. <a href="/disclaimer">Read the full disclaimer</a>.</p>
+      </div>
     </section>
   </main>
 
   <footer class="footer site-foot">
-    <div class="foot-brand"><img src="/assets/logo.svg" alt="" width="22" height="22"><span><b>PolyOS 7</b> for Debian · by Cryptic Software</span></div>
-    <nav aria-label="More">
-      <a href="/download">Download</a><a href="/install">Install guide</a><a href="/docs">Documentation</a><a href="/changelog">Updates</a>
-      <a href="/support">Help &amp; Support</a><a href="/security">Security</a><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Service</a>
-      <a href="/account">Poly Account</a>
-    </nav>
-    <p class="foot-note">PolyOS works without an online account. The PolyOS logo and artwork come from the Scratch project by PIXAPoLY Software (CC BY-SA 2.0).</p>
+    <div class="foot-top">
+      <div class="foot-about">
+        <a class="brand" href="/"><img src="/assets/logo.svg" alt="" width="26" height="26"><span>PolyOS <b>7</b></span></a>
+        <p>The operating system built in Scratch, as a real desktop on Debian. Free and open source, by Cryptic Software.</p>
+        <a class="btn small" href="/download"><svg class="ico"><use href="#i-download"/></svg>Download</a>
+      </div>
+      <nav aria-label="PolyOS"><h4>PolyOS</h4><a href="/download">Download</a><a href="/install">Install guide</a><a href="/docs">Documentation</a><a href="/changelog">Updates</a></nav>
+      <nav aria-label="Help"><h4>Help</h4><a href="/support">Help &amp; Support</a><a href="/#faq">Questions</a><a href="/security">Security</a><a href="/account">Poly Account</a></nav>
+      <nav aria-label="Legal"><h4>Legal</h4><a href="/terms">Terms of Service</a><a href="/privacy">Privacy Policy</a><a href="/disclaimer">Disclaimer</a><a href="/disclaimer#licenses">Licenses and credits</a></nav>
+    </div>
+    <p class="foot-note">© 2026 Cryptic Software. PolyOS 7 for Debian is an independent project, provided as is and without warranty; it isn’t affiliated with the Scratch Foundation, Debian or Microsoft. The PolyOS logo and artwork come from the Scratch project by PIXAPoLY Software (CC BY-SA 2.0). <a href="/disclaimer">Disclaimer</a></p>
   </footer>
+
+  <button class="to-top" type="button" aria-label="Back to the top" hidden><svg class="ico"><use href="#i-arrow"/></svg></button>
 
   <dialog class="guide" aria-labelledby="guide-title">
     <button class="guide-close" aria-label="Close"><svg class="ico"><use href="#i-close"/></svg></button>
@@ -415,8 +426,7 @@
         <a href="https://rufus.ie/" target="_blank" rel="noopener">Rufus</a> works too (choose <i>DD mode</i> when it asks).</li>
       <li><b>Start from the USB drive</b>Restart with the USB drive plugged in and open the boot menu, usually with
         <kbd>F12</kbd>, <kbd>F11</kbd>, <kbd>F9</kbd> or <kbd>Esc</kbd> right after turning on. Pick the USB drive.
-        ARM64 computers start it the same way when their firmware is UEFI (on a Raspberry Pi 4, install the
-        community UEFI firmware first).</li>
+        ARM64 computers start it the same way when their firmware is UEFI.</li>
       <li><b>Try it, then install</b>PolyOS starts from the USB drive without changing anything. When you're ready, click
         <i>Install PolyOS 7</i> and choose the drive; everything on it is replaced.</li>
     </ol>

@@ -50,34 +50,45 @@ def ico(name: str) -> str:
     return f'<svg class="ico"><use href="#i-{name}"/></svg>'
 
 
-NAV = [("/download", "Download"), ("/#features", "Features"), ("/docs", "Docs"), ("/changelog", "Updates"),
-       ("/security", "Security"), ("/support", "Support")]
+NAV = [("/download", "Download"), ("/#features", "Features"), ("/#tour", "Tour"), ("/#faq", "FAQ"), ("/docs", "Docs"),
+       ("/changelog", "Updates"), ("/support", "Support")]
 
 HEADER = (
     '<header class="nav" id="top">\n'
     '    <a class="brand" href="/"><img src="/assets/logo.svg" alt="" width="30" height="30"><span>PolyOS <b>7</b></span></a>\n'
-    '    <nav aria-label="Site">\n'
+    '    <nav id="site-nav" aria-label="Site">\n'
     + "".join(f'      <a href="{href}">{label}</a>\n' for href, label in NAV)
     + '    </nav>\n'
-    f'    <a class="btn small" href="/account">{ico("user")}Poly Account</a>\n'
+    f'    <a class="btn small nav-account" href="/account">{ico("user")}Poly Account</a>\n'
+    '    <button class="nav-toggle" type="button" aria-label="Menu" aria-expanded="false" aria-controls="site-nav"><span></span><span></span></button>\n'
+    '    <div class="nav-progress" aria-hidden="true"></div>\n'
     '  </header>'
 )
 
 FOOTER = (
     '<footer class="footer site-foot">\n'
-    '    <div class="foot-brand"><img src="/assets/logo.svg" alt="" width="22" height="22"><span><b>PolyOS 7</b> for Debian · by Cryptic Software</span></div>\n'
-    '    <nav aria-label="More">\n'
-    '      <a href="/download">Download</a><a href="/install">Install guide</a><a href="/docs">Documentation</a><a href="/changelog">Updates</a>\n'
-    '      <a href="/support">Help &amp; Support</a><a href="/security">Security</a><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Service</a>\n'
-    '      <a href="/account">Poly Account</a>\n'
-    '    </nav>\n'
-    '    <p class="foot-note">PolyOS works without an online account. The PolyOS logo and artwork come from the Scratch project by PIXAPoLY Software (CC BY-SA 2.0).</p>\n'
+    '    <div class="foot-top">\n'
+    '      <div class="foot-about">\n'
+    '        <a class="brand" href="/"><img src="/assets/logo.svg" alt="" width="26" height="26"><span>PolyOS <b>7</b></span></a>\n'
+    '        <p>The operating system built in Scratch, as a real desktop on Debian. Free and open source, by Cryptic Software.</p>\n'
+    f'        <a class="btn small" href="/download">{ico("download")}Download</a>\n'
+    '      </div>\n'
+    '      <nav aria-label="PolyOS"><h4>PolyOS</h4><a href="/download">Download</a><a href="/install">Install guide</a>'
+    '<a href="/docs">Documentation</a><a href="/changelog">Updates</a></nav>\n'
+    '      <nav aria-label="Help"><h4>Help</h4><a href="/support">Help &amp; Support</a><a href="/#faq">Questions</a>'
+    '<a href="/security">Security</a><a href="/account">Poly Account</a></nav>\n'
+    '      <nav aria-label="Legal"><h4>Legal</h4><a href="/terms">Terms of Service</a><a href="/privacy">Privacy Policy</a>'
+    '<a href="/disclaimer">Disclaimer</a><a href="/disclaimer#licenses">Licenses and credits</a></nav>\n'
+    '    </div>\n'
+    '    <p class="foot-note">© 2026 Cryptic Software. PolyOS 7 for Debian is an independent project, provided as is and without warranty; '
+    'it isn’t affiliated with the Scratch Foundation, Debian or Microsoft. The PolyOS logo and artwork come from the Scratch project '
+    'by PIXAPoLY Software (CC BY-SA 2.0). <a href="/disclaimer">Disclaimer</a></p>\n'
     '  </footer>'
 )
 
 
 def page(slug: str, title: str, description: str, body: str, *, icons=(), scripts=(), body_attrs: str = "", main_class: str = "page-main") -> None:
-    names = sorted({"user", "download", *icons})
+    names = sorted({"user", "download", "arrow", *icons})
     html = f"""<!doctype html>
 <html lang="en">
 <head>
@@ -88,7 +99,7 @@ def page(slug: str, title: str, description: str, body: str, *, icons=(), script
   <meta name="theme-color" content="#151515">
   <link rel="icon" href="/assets/logo.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/assets/site.css">
-{"".join(f'  <script src="{s}" defer></script>{chr(10)}' for s in scripts)}</head>
+{"".join(f'  <script src="{s}" defer></script>{chr(10)}' for s in dict.fromkeys(("/assets/site.js", *scripts)))}</head>
 <body{body_attrs}>
   {sprite(names)}
 
@@ -99,6 +110,7 @@ def page(slug: str, title: str, description: str, body: str, *, icons=(), script
   </main>
 
   {FOOTER}
+  <button class="to-top" type="button" aria-label="Back to the top" hidden>{ico("arrow")}</button>
 </body>
 </html>
 """
@@ -146,7 +158,7 @@ page("download", "Download PolyOS 7", "Download the PolyOS 7 live USB and instal
             Apple Silicon Macs (in UTM, Parallels or VMware Fusion) and ARM64 computers with UEFI: <b>ARM64</b>.</p>
           <p class="dl-fresh">{ico("info")}<span><b>A fresh install.</b> PolyOS installs on a whole drive and replaces everything on the drive you choose,
             including Windows if it's there. Dual boot next to Windows isn't part of this download.</span></p>
-          <p class="dl-note" data-release-note>Always the newest release.</p>
+          <p class="dl-note" data-release-note>Always the newest release. By downloading you accept the <a href="/disclaimer">disclaimer</a>.</p>
           <p class="dl-links"><a href="/download/checksums" data-release-sums>SHA256 checksums</a> · <a href="/install">Install guide</a> · <a href="/changelog">What's new</a></p>
         </div>
         <ul class="dl-needs" aria-label="What you need">
@@ -313,6 +325,55 @@ page("terms", "Terms of Service · PolyOS 7", "The terms for using Poly Account 
         ("Contact", '<p>Questions? <a href="/support">Contact us</a>.</p>'),
     ], updated="Version 2026-09-26 · Effective September 26, 2026"), icons=("info",))
 
+# ---- Disclaimer -----------------------------------------------------------------------------------
+page("disclaimer", "Disclaimer · PolyOS 7", "What PolyOS 7 for Debian is, what it isn't, and what to know before installing it.", prose(
+    "Legal", "Disclaimer",
+    "PolyOS 7 for Debian is a free, independent project. Please read this before you download or install it.", [
+        ("An independent project", '<p>PolyOS was created in Scratch by <b>PIXAPoLY Software</b>. PolyOS 7 for Debian is made by <b>Cryptic Software</b>, '
+                                   'with the PolyOS team’s blessing. It is not made, sponsored or endorsed by the Scratch Foundation, MIT, the Debian '
+                                   'project, Microsoft, Google, Valve, Apple, NVIDIA or any other company or project named on this site.</p>'),
+        ("Provided as is", '<p>PolyOS is free software, released under the GNU General Public License, version 3 or later. It comes '
+                           '<b>without any warranty</b>, to the extent the law allows: not that it works for any particular purpose, runs on your '
+                           'computer, or is free of mistakes. You use it at your own risk.</p>'),
+        ("Your drives and your data", '<ul><li><b>Installing replaces everything on the drive you choose</b>, including Windows or any other '
+                                      'system and all files on it. It can’t be undone.</li>'
+                                      '<li><b>Back up your files first</b>, to another drive or the cloud. Try PolyOS from the USB drive or in a '
+                                      'virtual machine before installing it.</li>'
+                                      '<li>We aren’t responsible for lost data, a computer that won’t start, changes to firmware settings, '
+                                      'or any other damage from installing or using PolyOS.</li></ul>'),
+        ("Firmware and drivers", '<p>Driver Manager can install drivers and firmware (BIOS/UEFI, SSDs, docks) that come from your computer’s maker '
+                                 'through the Linux Vendor Firmware Service, and drivers from Debian and hardware makers. They’re provided by those '
+                                 'makers under their own terms. Updating firmware can’t always be undone: keep the computer plugged in, and '
+                                 'only update when you need to. Installing another operating system may affect your computer’s warranty or '
+                                 'support; check with its maker.</p>'),
+        ("Apps from other makers", '<p>Apps in PolyMarket (such as Google Chrome, Steam, Discord or Spotify), cloud gaming services and the drivers '
+                                   'above come from their own makers, through Debian, Flathub or the makers themselves. They’re covered by their '
+                                   'makers’ licenses, terms and privacy policies, not ours, and we can’t promise they work or stay available.</p>'),
+        ("Not for critical use", '<p>PolyOS isn’t designed or tested for systems where a failure could cause harm: medical, safety, industrial '
+                                 'control, emergency or similar uses. Don’t use it for them.</p>'),
+        ("Online services", '<p>Poly Account, sync, backups and the update service are optional. We work to keep them running, but they’re provided '
+                            'as is and may change or be unavailable at times; PolyOS keeps working without them. The <a href="/terms">Terms of '
+                            'Service</a> and <a href="/privacy">Privacy Policy</a> cover them.</p>'),
+        ("Downloads", '<p>Download PolyOS only from this website, its <a href="https://github.com/kingxxasavan/poly-os-7-debain-receration/releases">'
+                      'GitHub releases</a> or its <a href="https://sourceforge.net/projects/poly-os-7/">SourceForge</a> page, and check the '
+                      'download against the published SHA256 checksums. A copy from anywhere else may have been changed.</p>'),
+        ("This website", '<p>We try to keep this site accurate, but features, screenshots and instructions can differ from the version you '
+                         'download, and may change without notice.</p>'),
+        ("Trademarks", '<p>“Scratch” is a trademark of the Scratch Foundation. Debian is a registered trademark of Software in the Public Interest, Inc. '
+                       'Windows is a trademark of Microsoft; Google Chrome of Google; Steam of Valve; other names are trademarks of their owners. '
+                       'They’re used here only to describe what PolyOS works with, and don’t mean those companies support PolyOS.</p>'),
+        ("Licenses", '<ul><li><b>PolyOS for Debian</b>: GNU General Public License v3 or later.</li>'
+                     '<li><b>The PolyOS logo, colors and PIXAPoLY artwork</b>: from the PolyOS 7 Scratch project, under CC BY-SA 2.0.</li>'
+                     '<li><b>Debian and the software it includes</b>: each package under its own license (see <code>/usr/share/doc</code> in PolyOS).</li>'
+                     '<li><b>Poppins</b> and <b>Inter</b> fonts: SIL Open Font License. The crystal wallpapers are third-party photos used by PolyOS 7.</li>'
+                     '<li>Some drivers and firmware are non-free and covered by their makers’ licenses.</li></ul>'),
+        ("Limitation of liability", '<p>To the fullest extent the law allows, Cryptic Software and the people who make PolyOS aren’t liable for any '
+                                    'direct, indirect, incidental or consequential damages, including lost data, lost profits or damage to hardware, '
+                                    'arising from downloading, installing or using PolyOS or Poly services. Some places don’t allow these limits, '
+                                    'so they may not all apply to you.</p>'),
+        ("Questions", '<p>Something here unclear? <a href="/support">Contact us</a>.</p>'),
+    ], updated="Last updated September 28, 2026"), icons=("info",))
+
 # ---- Help & Support -----------------------------------------------------------------------------
 FAQ = [
     ("Do I need a Poly Account?", "No. PolyOS works fully offline and updates without one. An account adds device management, recovery and sync."),
@@ -358,7 +419,12 @@ for name in ("index.html", "install.html"):
     text = path.read_text("utf-8")
     text = re.sub(r'<header class="nav" id="top">.*?</header>', HEADER, text, count=1, flags=re.S)
     text = re.sub(r"<footer class=\"footer[^\"]*\">.*?</footer>", FOOTER, text, count=1, flags=re.S)
-    for needed in ("user",):
+    if 'src="assets/site.js"' not in text and 'src="/assets/site.js"' not in text:  # the menu, back to top
+        text = text.replace("</head>", '  <script src="/assets/site.js" defer></script>\n</head>', 1)
+    if 'class="to-top"' not in text:
+        text = text.replace("</footer>", '</footer>\n\n  <button class="to-top" type="button" aria-label="Back to the top" hidden>'
+                            f'{ico("arrow")}</button>', 1)
+    for needed in ("user", "arrow", "download"):
         if f'id="i-{needed}"' not in text:
             text = text.replace("<defs>", f'<defs>\n      <symbol id="i-{needed}" viewBox="0 0 24 24">{ICONS[needed]}</symbol>', 1)
     path.write_text(text, "utf-8")
