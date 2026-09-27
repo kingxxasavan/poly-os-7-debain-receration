@@ -523,6 +523,7 @@ route('GET', '/api/account/export', 'user', async ({ user, res }) => {
     sessions: await q('SELECT agent, place, created_at, last_seen FROM sessions WHERE user_id = $1', [user.id]),
     activity: await q('SELECT kind, detail, place, at FROM events WHERE user_id = $1 ORDER BY at DESC LIMIT 500', [user.id]),
     sync: await q('SELECT key, value, updated_at FROM sync_items WHERE user_id = $1', [user.id]),
+    backups: await q('SELECT device_id, data, updated_at FROM device_backups WHERE user_id = $1', [user.id]),
     exportedAt: new Date().toISOString(),
   };
   res.setHeader('Content-Disposition', 'attachment; filename="poly-account.json"');
@@ -763,6 +764,43 @@ route('PUT', '/api/v1/sync', null, async ({ req, body }) => {
   }
   return { ok: true, saved: items.length };
 });
+// Backups: each computer keeps one of itself (settings, edition, installed apps; no files or passwords)
+// so setting up a new computer can copy one of your others, like cloning a PC.
+function backupSummary(data) {
+  const s = data && typeof data.settings === 'object' && data.settings ? data.settings : {};
+  return {
+    edition: typeof data?.edition === 'string' ? data.edition : 'regular',
+    apps: Array.isArray(data?.apps) ? data.apps.length : 0,
+    theme: s.theme === 'light' ? 'light' : 'dark',
+    accent: typeof s.accent === 'string' ? s.accent : null,
+    version: typeof data?.polyos === 'string' ? data.polyos : '',
+  };
+}
+route('PUT', '/api/v1/backup', null, async ({ req, body }) => {
+  const d = await deviceFromRequest(req);
+  const data = body.backup;
+  if (!data || typeof data !== 'object' || Array.isArray(data)) fail('No backup was sent.');
+  if (JSON.stringify(data).length > 64 * 1024) fail('The backup is too large.');
+  await q(`INSERT INTO device_backups (device_id, user_id, data, updated_at) VALUES ($1, $2, $3, now())
+           ON CONFLICT (device_id) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`, [d.id, d.user_id, JSON.stringify(data)]);
+  return { ok: true };
+});
+route('GET', '/api/v1/backups', null, async ({ req }) => {
+  const d = await deviceFromRequest(req);
+  const rows = await q(`SELECT b.device_id, b.data, b.updated_at, dv.name, dv.last_seen FROM device_backups b
+                        JOIN devices dv ON dv.id = b.device_id WHERE b.user_id = $1 AND b.device_id <> $2
+                        ORDER BY b.updated_at DESC`, [d.user_id, d.id]);
+  return { backups: rows.map((r) => ({ id: r.device_id, name: r.name, updatedAt: r.updated_at, lastSeen: r.last_seen, ...backupSummary(r.data) })) };
+});
+route('GET', '/api/v1/backups/:id', null, async ({ req, params }) => {
+  const d = await deviceFromRequest(req);
+  if (!/^[0-9a-f-]{36}$/i.test(params.id)) fail('Not found.', 404);
+  const row = await one(`SELECT b.data, b.updated_at, dv.name FROM device_backups b JOIN devices dv ON dv.id = b.device_id
+                         WHERE b.device_id = $1 AND b.user_id = $2`, [params.id, d.user_id]);
+  if (!row) fail('That backup isn’t in your account.', 404);
+  return { id: params.id, name: row.name, updatedAt: row.updated_at, backup: row.data };
+});
+
 // The update check: anyone can ask, with no account and nothing about the computer but its version.
 route('GET', '/api/v1/updates/check', null, async ({ url }) => releases.check({
   channel: url.searchParams.get('channel') || 'stable', version: url.searchParams.get('version') || '0.0.0',

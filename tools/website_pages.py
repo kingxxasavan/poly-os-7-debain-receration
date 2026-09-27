@@ -220,7 +220,10 @@ page("docs", "Documentation · PolyOS 7", "How to install, use and update PolyOS
                          '<li><b>Each computer has its own key</b>, so removing one (Devices › Remove device) doesn’t affect the others. The computer never keeps your password.</li>'
                          '<li><b>Remote management</b> (restart, lock and install updates from the website) is off until you turn it on at that computer.</li>'
                          '<li><b>Recovery</b>: a verified email resets your password; so does a recovery key from <a href="/account#recovery">Poly Account › Recovery</a>.</li>'
-                         '<li><b>Poly Sync</b> keeps settings, theme, wallpapers and pinned apps the same on your computers. Files aren’t synced.</li></ul>'),
+                         '<li><b>Poly Sync</b> keeps settings, theme, wallpapers and pinned apps the same on your computers. Files aren’t synced.</li>'
+                         '<li><b>Set up like one of your computers:</b> with Poly Sync on, each computer keeps a backup of itself in your account '
+                         '(its settings, edition and PolyMarket apps; no files or passwords). When you install PolyOS on a new computer and '
+                         'connect your account, pick one: the new computer gets its settings and edition, and its apps install once it’s online.</li></ul>'),
         ("Keyboard shortcuts", f'<table class="guide-table"><thead><tr><th>Keys</th><th>What it does</th></tr></thead><tbody>{shortcut_rows}</tbody></table>'),
         ("Vara", '<p>Vara is the PolyOS assistant and AI agent. Ask it from Start or with Win+V: it opens apps, changes the '
                  'volume, brightness and Wi-Fi, and writes and runs code, makes 3D models and works with ROS 2 robots and '

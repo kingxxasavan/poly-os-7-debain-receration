@@ -947,6 +947,7 @@ class Backend:
             "connected": bool(state.get("credential")), "live": self._is_live(), "server": updates.server(),
             "account": state.get("account"), "device": state.get("device"), "sync": bool(state.get("sync")),
             "remoteManagement": bool(state.get("remoteManagement")), "lastCheckin": state.get("lastCheckin"),
+            "backupAt": state.get("backupAt"),
             "error": state.get("lastError"), "telemetry": state.get("telemetry", "minimal"),
             "link": {k: link[k] for k in ("userCode", "verificationUrl", "expiresAt", "status")} if link else None,
         }
@@ -1033,6 +1034,45 @@ class Backend:
         self.bus.publish("polyaccount")
         return self.poly_account_status()
 
+    def poly_account_backups(self) -> dict:
+        """The account's other computers that have a backup (setup: "Set up like one of your computers")."""
+        from . import polyaccount
+        state = polyaccount.load(self._pa_home())
+        if not state.get("credential"):
+            raise ApiError("Connect a Poly Account first.")
+        try:
+            return {"backups": polyaccount.list_backups(state)}
+        except polyaccount.AccountError as exc:
+            raise ApiError(str(exc), 502) from None
+
+    def poly_account_backup(self, device_id: str) -> dict:
+        from . import polyaccount
+        state = polyaccount.load(self._pa_home())
+        if not state.get("credential"):
+            raise ApiError("Connect a Poly Account first.")
+        try:
+            return polyaccount.get_backup(state, device_id)
+        except polyaccount.AccountError as exc:
+            raise ApiError(str(exc), exc.status if exc.status in (401, 404) else 502) from None
+
+    def _pa_backup(self, state: dict) -> None:
+        """Keep this computer's backup in the account (with sync on), so a new one can copy it."""
+        from . import polyaccount, store
+        if self._is_live():  # the USB drive's session isn't a computer to copy
+            return
+        try:
+            catalog = store.catalog_with_status(store.load())
+            apps = [a["id"] for a in catalog["apps"] if a.get("installed") and not a.get("system")]
+        except Exception:  # noqa: BLE001 - no app list this time; settings still count
+            apps = []
+        backup = polyaccount.make_backup(self.settings.snapshot(), apps)
+        now = time.time()
+        if polyaccount.backup_due(state, backup, now):
+            try:
+                polyaccount.push_backup(state, backup, now, self._pa_home())
+            except polyaccount.AccountError:
+                pass
+
     def poly_account_checkin(self) -> dict | None:
         """Report in, run waiting actions from the website, and bring in synced settings."""
         from . import autoupdate, polyaccount
@@ -1052,6 +1092,7 @@ class Backend:
         for cmd in r.get("commands") or []:
             self._pa_run(state, cmd)
         self._pa_pull(state, r.get("sync", {}).get("revision"))
+        self._pa_backup(state)
         self.bus.publish("polyaccount")
         return r
 

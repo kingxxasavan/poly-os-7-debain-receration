@@ -129,6 +129,13 @@ const SCHEMA = [
      updated_at timestamptz NOT NULL DEFAULT now(),
      PRIMARY KEY (user_id, key)
    )`,
+  // one backup per computer (its settings, edition and apps), so a new computer can be set up the same way
+  `CREATE TABLE IF NOT EXISTS device_backups (
+     device_id uuid PRIMARY KEY REFERENCES devices(id) ON DELETE CASCADE,
+     user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     data jsonb NOT NULL,
+     updated_at timestamptz NOT NULL DEFAULT now()
+   )`,
   `CREATE TABLE IF NOT EXISTS email_tokens (
      token_hash text PRIMARY KEY,
      user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,

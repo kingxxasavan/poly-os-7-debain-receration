@@ -1037,7 +1037,11 @@ class PolyAccountClientTests(unittest.TestCase):
             # synced settings arrive (only the categories that sync) and aren't pushed straight back
             self.assertEqual(be.settings.get("accent"), "#d97fb8")
             self.assertNotEqual(be.settings.get("pinned"), ["x.desktop"])
-            self.assertFalse([c for c in self.calls if c[0] == "PUT"])
+            self.assertFalse([c for c in self.calls if c[0] == "PUT" and c[1] == "/api/v1/sync"])
+            # ...and this computer's backup (settings, edition, apps) is kept in the account
+            backups = [c[2]["backup"] for c in self.calls if c[0] == "PUT" and c[1] == "/api/v1/backup"]
+            self.assertTrue(backups)
+            self.assertEqual(backups[-1]["edition"], "regular")
             # a change made here is sent
             be.update_settings({"accent": "#678fd9"})
             time.sleep(0.2)

@@ -29,7 +29,7 @@ import time
 from pathlib import Path
 from typing import Callable
 
-from . import __version__, drivers, firststart, hwcheck, recovery, security
+from . import __version__, drivers, firststart, hwcheck, polyaccount, recovery, security
 from .arch import EFI, debian_arch
 
 KiB, MiB, GiB = 1024, 1024 ** 2, 1024 ** 3
@@ -507,16 +507,20 @@ def validate_plan(plan: dict, existing_users: set[str] | None = None) -> dict:
     profile = plan.get("profile") if plan.get("profile") in hwcheck.PROFILE_SETTINGS else None
     background = plan.get("background") if plan.get("background") in ("normal", "reduced") else None
     look = {**(hwcheck.PROFILE_SETTINGS[profile] if profile else {}), **({"backgroundLimit": background} if background else {})}
+    # "Set up like one of your computers": that computer's settings and apps (its look is on the
+    # Personalization screen, so this one's theme and accent win)
+    restore = polyaccount.clean_backup(plan.get("restore")) if plan.get("restore") else None
+    copied = {k: v for k, v in (restore or {}).get("settings", {}).items() if k not in ("theme", "accent")}
     clean = {"mode": mode, "disk": disk, "hostname": hostname, "timezone": tz,
              "user": {"username": username, "fullName": full, "password": password, "recoveryKey": str(key)},
              "appearance": {"theme": theme, "accent": accent.lower()}, "edition": edition,
              # Setup asked everything before installing, so the new system starts straight to the
              # desktop; the edition's apps and the drivers install by themselves once online.
-             "extraSettings": {**look, "edition": edition, "developerMode": edition == "developer",
+             "extraSettings": {**copied, **look, "edition": edition, "developerMode": edition == "developer",
                                "showAllApps": False, "gameMode": edition == "gaming",
                                "editionSetup": True},
              "firstStart": firststart.clean_plan(plan.get("drivers") or [], edition if edition != "regular" else None,
-                                                 drivers.DRIVER_PACKAGE_RE),
+                                                 drivers.DRIVER_PACKAGE_RE, (restore or {}).get("apps"), polyaccount.APP_ID_RE),
              "polyAccount": poly_account_state(plan.get("polyAccount"))}
     if layout:
         clean.update(layout)

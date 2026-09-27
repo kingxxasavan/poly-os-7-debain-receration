@@ -309,6 +309,19 @@ def pack_install(name: str, ids: list[str]) -> None:
     wrong = [a["name"] for a in chosen if not store.available(a)]
     if wrong:
         raise AdminError(f"Not made for this computer's processor: {', '.join(wrong)}")
+    install_catalog_apps(chosen, f"{pack['name']} is ready.", gaming=name == "gaming")
+
+
+def apps_install(ids: list[str]) -> None:
+    """A copied computer's PolyMarket apps: only apps in the catalog, for this processor, that aren't
+    part of PolyOS already. Unknown ids are skipped (the catalog may have changed since the backup)."""
+    apps = store.validate(store.load())
+    chosen = [apps[i] for i in dict.fromkeys(ids) if i in apps and store.available(apps[i]) and not apps[i].get("system")]
+    if chosen:
+        install_catalog_apps(chosen, "Your apps are installed.")
+
+
+def install_catalog_apps(chosen: list[dict], ready: str, gaming: bool = False) -> None:
     debs = [p for a in chosen if a["source"] == "debian" for p in a["packages"]]
     refs = [a["ref"] for a in chosen if a["source"] == "flathub"]
     skipped: list[str] = []
@@ -326,12 +339,12 @@ def pack_install(name: str, ids: list[str]) -> None:
         for n, ref in enumerate(refs):
             emit({"progress": 0.4 + 0.55 * n / len(refs), "message": f"Installing {ref.rsplit('.', 1)[-1]} ({n + 1} of {len(refs)})…"})
             flatpak(["install", "--system", "-y", "--noninteractive", "flathub", ref])
-    if name == "gaming":
+    if gaming:
         GAMING_SYSCTL.write_text(GAMING_SYSCTL_TEXT)
         subprocess.run(["sysctl", "-q", "-p", str(GAMING_SYSCTL)], check=False, capture_output=True, timeout=30)
     if skipped:
         emit({"log": f"not available from Debian here: {', '.join(skipped)}"})
-    emit({"progress": 1.0, "message": f"{pack['name']} is ready." + (f" Skipped (not in this Debian): {', '.join(skipped)}." if skipped else "")})
+    emit({"progress": 1.0, "message": ready + (f" Skipped (not in this Debian): {', '.join(skipped)}." if skipped else "")})
 
 
 def security(what: str, state: str) -> None:
@@ -557,7 +570,7 @@ def first_start() -> None:
         if ids:
             pack_install(name, ids)
 
-    firststart.run(emit, drivers_install, install_pack, online)
+    firststart.run(emit, drivers_install, install_pack, online, install_apps=apps_install)
 
 
 def main(argv: list[str] | None = None) -> int:

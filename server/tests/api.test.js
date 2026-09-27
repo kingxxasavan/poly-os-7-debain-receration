@@ -182,6 +182,34 @@ test('sign in from PolyOS, create an account from PolyOS, and sync', async () =>
   assert.deepEqual((await b('GET', '/api/v1/sync')).data.items, {}); // another account sees nothing
 });
 
+test('a computer backs itself up, and a new one of yours can copy it', async () => {
+  const ip = '198.51.100.44'; // its own address, so its sign-ins don't count against the other tests
+  const web = client({ ip });
+  const { email } = await newAccount(web);
+  const pc = client({ csrf: false, ip });
+  const desk = client({ csrf: false, ip, auth: (await pc('POST', '/api/v1/device/signin', { email, password: PASSWORD, name: 'Desktop', info: {} })).data.credential });
+  const fresh = client({ csrf: false, ip, auth: (await pc('POST', '/api/v1/device/signin', { email, password: PASSWORD, name: 'New PC', info: {} })).data.credential });
+  const backup = { polyos: '1.4.0', edition: 'gaming', settings: { theme: 'light', accent: '#e07f9b' }, apps: ['steam', 'discord'] };
+  assert.equal((await desk('PUT', '/api/v1/backup', { backup })).data.ok, true);
+  assert.equal((await desk('PUT', '/api/v1/backup', { backup: 'nope' })).status, 400);
+  assert.equal((await desk('PUT', '/api/v1/backup', { backup: { apps: ['x'.repeat(70000)] } })).status, 400);
+  // the new computer sees the desktop's backup (not its own), with a summary for the list
+  const list = (await fresh('GET', '/api/v1/backups')).data.backups;
+  assert.equal(list.length, 1);
+  assert.equal(list[0].name, 'Desktop');
+  assert.deepEqual([list[0].edition, list[0].apps, list[0].theme], ['gaming', 2, 'light']);
+  assert.deepEqual((await desk('GET', '/api/v1/backups')).data.backups, []);
+  const got = await fresh('GET', `/api/v1/backups/${list[0].id}`);
+  assert.deepEqual(got.data.backup, backup);
+  // someone else's computer can't read it
+  const other = client({ ip: '198.51.100.45' });
+  const { email: otherEmail } = await newAccount(other);
+  const stranger = client({ csrf: false, ip, auth: (await pc('POST', '/api/v1/device/signin', { email: otherEmail, password: PASSWORD, name: 'X', info: {} })).data.credential });
+  assert.equal((await stranger('GET', `/api/v1/backups/${list[0].id}`)).status, 404);
+  assert.deepEqual((await stranger('GET', '/api/v1/backups')).data.backups, []);
+  assert.equal((await client({ csrf: false, ip })('GET', '/api/v1/backups')).status, 401);
+});
+
 test('preferences, sessions, recovery key and deleting the account', async () => {
   const call = client();
   const { email } = await newAccount(call);

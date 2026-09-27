@@ -6,14 +6,17 @@ once, creating an account, or a 6-digit code entered on the website. It lives in
 minutes: its version and update settings, its hardware too if the account's device information
 isn't Minimal, and picks up actions sent from the website. Restart, lock and install updates run
 only while Remote management is on here. Poly Sync keeps chosen settings the same on every
-computer on the account.
+computer on the account. With sync on, each computer also keeps a backup of itself (its settings,
+edition and PolyMarket apps; no files or passwords), so a new computer can be set up the same way.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import platform
+import re
 import shutil
 import socket
 import threading
@@ -35,6 +38,18 @@ SYNC_KEYS = {
     "apps": ("pinned", "desktopIcons"),
     "accessibility": ("scale",),
 }
+
+
+# The backup of this computer that setting up another one can copy ("Set up like one of your
+# computers"). Settings that belong to the hardware (effects, screens, performance) stay behind.
+BACKUP_SETTINGS = ("theme", "accent", "glass", "wallpaper", "lockWallpaper", "clock24h", "showSeconds", "desktopClock",
+                   "desktopIcons", "desktopOpen", "pinned", "startPinned", "widgets", "taskbarStyle", "taskbarAlign",
+                   "taskbarAutoHide", "taskbarWidgets", "taskbarDate", "scale", "nightLight", "powerMode", "screenOff",
+                   "sleepAfter", "lockOnSleep", "lockNews", "keepRecent", "cloudGaming", "gameMode", "displayMode")
+BACKUP_EVERY = 6 * 3600  # at most this often, and only when something changed
+EDITIONS = ("regular", "developer", "gaming")
+APP_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
+MAX_BACKUP_APPS = 120
 
 
 class AccountError(Exception):
@@ -243,3 +258,61 @@ def pull(state: dict, keys: list[str]) -> dict:
     wanted = set(keys)
     return {k[len("settings."):]: v["value"] for k, v in items.items()
             if k.startswith("settings.") and k[len("settings."):] in wanted}
+
+
+# ---- backups: "Set up like one of your computers" ----------------------------------------------
+
+def make_backup(settings: dict, apps: list[str]) -> dict:
+    """This computer's backup: its settings (built-in wallpapers only), edition and PolyMarket apps."""
+    return {"polyos": __version__, "edition": settings.get("edition") if settings.get("edition") in EDITIONS else "regular",
+            "settings": {k: settings[k] for k in BACKUP_SETTINGS if k in settings and shareable(k, settings[k])},
+            "apps": sorted({a for a in apps if isinstance(a, str) and APP_ID_RE.match(a)})[:MAX_BACKUP_APPS]}
+
+
+def clean_backup(data) -> dict | None:
+    """A backup from the account, made safe to apply: known settings that pass their checks, a known
+    edition and plausible app ids (what they install is decided by PolyMarket's catalog)."""
+    if not isinstance(data, dict):
+        return None
+    from .core import VALIDATORS
+    settings = {}
+    raw = data.get("settings") if isinstance(data.get("settings"), dict) else {}
+    for key in BACKUP_SETTINGS:
+        if key in raw and key in VALIDATORS and shareable(key, raw[key]):
+            try:
+                settings[key] = VALIDATORS[key](raw[key])
+            except (ValueError, TypeError):
+                continue
+    apps = [a for a in dict.fromkeys(data.get("apps") or []) if isinstance(a, str) and APP_ID_RE.match(a)][:MAX_BACKUP_APPS]
+    edition = data.get("edition") if data.get("edition") in EDITIONS else "regular"
+    return {"edition": edition, "settings": settings, "apps": apps}
+
+
+def backup_due(state: dict, backup: dict, now: float) -> bool:
+    """Send the backup when it changed, and not more than every few hours."""
+    if not state.get("credential") or not state.get("sync"):
+        return False
+    digest = hashlib.sha256(json.dumps(backup, sort_keys=True).encode()).hexdigest()
+    if digest == state.get("backupHash"):
+        return False
+    return now - float(state.get("backupAt") or 0) >= BACKUP_EVERY or not state.get("backupHash")
+
+
+def push_backup(state: dict, backup: dict, now: float, home: Path | None = None) -> None:
+    http("PUT", "/api/v1/backup", {"backup": backup}, state["credential"])
+    digest = hashlib.sha256(json.dumps(backup, sort_keys=True).encode()).hexdigest()
+    state.update(backupHash=digest, backupAt=now)
+    merge(state["credential"], {"backupHash": digest, "backupAt": now}, home)
+
+
+def list_backups(state: dict) -> list[dict]:
+    """The account's other computers that have a backup, newest first."""
+    return http("GET", "/api/v1/backups", None, state["credential"]).get("backups", [])
+
+
+def get_backup(state: dict, device_id: str) -> dict:
+    if not re.match(r"^[0-9a-fA-F-]{36}$", device_id or ""):
+        raise AccountError("That backup isn’t in your account.", 404)
+    r = http("GET", f"/api/v1/backups/{device_id}", None, state["credential"])
+    return {"id": r.get("id"), "name": r.get("name"), "updatedAt": r.get("updatedAt"), "backup": clean_backup(r.get("backup"))}
+

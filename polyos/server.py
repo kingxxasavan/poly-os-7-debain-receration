@@ -158,6 +158,8 @@ GET_API = {
     "/api/hardware": lambda be, q: be.hardware_check(),
     "/api/polyaccount": lambda be, q: be.poly_account_status(),
     "/api/polyaccount/countries": lambda be, q: be.poly_account_countries(),
+    "/api/polyaccount/backups": lambda be, q: be.poly_account_backups(),
+    "/api/polyaccount/backup": lambda be, q: be.poly_account_backup(_q(q, "id") or ""),
     "/api/updates": lambda be, q: be.updates_status(),
     "/api/security": lambda be, q: be.security_status(),
     "/api/widgets/data": lambda be, q: be.widgets.data(),

@@ -754,7 +754,8 @@ export function mount(root, store) {
       profile: profile || hardware?.profile || null, background: hardware?.background || null, drivers: recommended || [],
       ...(plan.mode === 'alongside' ? { size: plan.size } : {}),
       ...(plan.mode === 'custom' ? customLayout() : {}),
-      ...(plan.mode === 'pick' ? pickPayload() : {}) };
+      ...(plan.mode === 'pick' ? pickPayload() : {}),
+      ...(plan.restore ? { restore: plan.restore } : {}) };
     installJob = { state: 'running', progress: 0, message: 'Getting ready for installation…' };
     go(steps.indexOf(installing));
     try {
@@ -858,6 +859,7 @@ export function mount(root, store) {
       return [...head('Connect to Poly?'), h('div.su-wait', h('img.su-spin', { src: '/img/logo-white.svg', alt: '' }), 'One moment…')];
     }
     const refresh = (s) => { pa.status = s; if (s.connected) pa.view = 'connected'; go(step); };
+    const afterConnect = () => (live ? view('restore') : go(step + 1)); // installing: copy one of your computers?
     const offline = !store.state.system.network.kind || store.state.system.network.kind === 'none';
     if (pa.view === 'choose' && offline) {
       return [...head('Connect to Poly services?', 'Optional. PolyOS works just the same without an account.'),
@@ -951,6 +953,7 @@ export function mount(root, store) {
         h('label.su-check', privacy, h('span', 'I acknowledge the Privacy Policy')), err,
         paNav(() => view('have'), btn)];
     }
+    if (pa.view === 'restore') return restoreFrom(err, fail, paNav, view);
     // connected
     const a = pa.status.account || {};
     if (live && a.name && !plan.user.fullName) plan.user.fullName = a.name; // the account screen starts with your name
@@ -961,14 +964,14 @@ export function mount(root, store) {
           password: pa.password };
         if (!hostnameEdited) plan.hostname = `${plan.user.username}-polyos`;
         plan.fromPoly = true;
-        go(step + 1);
+        afterConnect();
       };
       return [...head(`Connected, ${(a.name || '').split(' ')[0] || 'welcome'}`, `This computer is part of ${a.email || 'your Poly Account'}.`),
         h('div.su-options',
           option('Use this account to sign in', `Sign in to this computer as ${a.name || 'you'}, with your Poly Account password. Your settings sync from your other computers.`,
             h('span.su-dual', icon('user')), useIt),
           option('Set up a separate account for this computer', 'A different name or password here. Poly Sync still works.',
-            h('span.su-dual', icon('plus')), () => { plan.fromPoly = false; go(step + 1); })),
+            h('span.su-dual', icon('plus')), () => { plan.fromPoly = false; afterConnect(); })),
         h('p.su-note', icon('info'), `Manage this computer at ${site()}/account. Remote management stays off until you turn it on in Settings › Account.`),
         nav(h('span'))];
     }
@@ -976,7 +979,48 @@ export function mount(root, store) {
       h('ul.su-bullets', live ? h('li', 'It stays connected after PolyOS is installed.') : null,
         h('li', `Manage it at ${site()}/account.`), h('li', 'Poly Sync keeps your settings the same on your computers.'),
         h('li', 'Remote management stays off until you turn it on in Settings › Account.')),
-      nav(next('Next', () => go(step + 1), { primary: true }))];
+      nav(next('Next', afterConnect, { primary: true }))];
+  }
+
+  // "Set up like one of your computers": each connected computer keeps a backup of itself in the
+  // account (settings, edition, PolyMarket apps; no files or passwords). Copying one brings its
+  // settings and edition here, and its apps install once this computer is online.
+  const EDITION_NAMES = { regular: 'Regular', developer: 'Developer', gaming: 'Gaming' };
+  function restoreFrom(err, fail, paNav, view) {
+    const onward = () => { pa.view = 'connected'; go(step + 1); }; // Back from the next step shows the account again
+    if (!pa.backups) {
+      api.get('/api/polyaccount/backups').then((r) => { pa.backups = r.backups || []; go(step); }, () => { pa.backups = []; go(step); });
+      return [...head('Your other computers'), h('div.su-wait', h('img.su-spin', { src: '/img/logo-white.svg', alt: '' }), 'Looking for your computers…')];
+    }
+    if (!pa.backups.length) { // nothing to copy yet: straight on
+      plan.restore = null;
+      queueMicrotask(onward);
+      return [...head('Your other computers')];
+    }
+    const ago = (t) => {
+      const days = Math.floor((Date.now() - new Date(t).getTime()) / 86400000);
+      return days < 1 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago`;
+    };
+    const pick = async (b) => {
+      err.hidden = true;
+      try {
+        const r = await api.get(`/api/polyaccount/backup?id=${encodeURIComponent(b.id)}`);
+        const copy = r.backup;
+        plan.restore = { name: r.name, ...copy };
+        plan.edition = copy.edition; // the edition screen came first; this computer becomes like that one
+        if (copy.settings.theme) plan.appearance.theme = copy.settings.theme; // shown on Personalization, still yours to change
+        if (copy.settings.accent) plan.appearance.accent = copy.settings.accent;
+        onward();
+      } catch (x) { fail(x); }
+    };
+    const chosen = plan.restore?.name;
+    return [...head('Set up like one of your computers?', 'PolyOS copies its settings, edition and PolyMarket apps. Its files stay on that computer.'),
+      h('div.su-options',
+        ...pa.backups.slice(0, 4).map((b) => option(b.name,
+          `${EDITION_NAMES[b.edition] || 'Regular'} · ${b.apps} app${b.apps === 1 ? '' : 's'} · ${b.theme === 'light' ? 'Light' : 'Dark'} · backed up ${ago(b.updatedAt)}`,
+          h('span.su-dual', icon(chosen === b.name ? 'check' : 'laptop')), () => pick(b))),
+        option('Start fresh', 'Set this computer up from scratch.', h('span.su-dual', icon('plus')), () => { plan.restore = null; onward(); })),
+      err, paNav(() => view('connected'))];
   }
 
   // The hardware check: is this PC a good fit, and if it's on the slower side, a lighter PolyOS for it.

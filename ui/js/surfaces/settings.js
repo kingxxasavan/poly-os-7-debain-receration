@@ -1161,7 +1161,9 @@ const pages = {
             h('small', st.error ? st.error : `Checked in ${when(st.lastCheckin)}`))),
         group('This computer',
           row('Name in your account', 'Rename it on the website', h('span.value', st.device?.name || '')),
-          row('Poly Sync', 'Keep your theme, wallpapers, taskbar and pinned apps the same on your computers', sync),
+          row('Poly Sync', st.backupAt
+            ? `The same theme, wallpapers, taskbar and pinned apps on your computers. Backed up ${new Date(st.backupAt * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}: a new computer can be set up like this one.`
+            : 'The same theme, wallpapers, taskbar and pinned apps on your computers, and a backup of this one (settings, edition, apps) to set up a new computer like it', sync),
           row('Remote management', 'Let your account restart, lock and install updates here from the website. Off unless you turn it on.', remote)),
         group('More',
           row('Manage your account', `Devices, security, recovery and privacy at ${site()}/account`,
