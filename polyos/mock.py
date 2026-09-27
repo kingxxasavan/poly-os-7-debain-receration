@@ -827,6 +827,33 @@ DP-1 disconnected (normal left inverted right x axis y axis)
         return self.jobs.start("pack", f"Setting up {info['name']}", [], target=name,
                                runner=self._simulate(steps, 6, finish), on_done=lambda j: self.bus.publish("store"))
 
+    # ---- Vara Voice (simulated: no microphone or process) ------------------------------------------
+    def _voice_installed(self):
+        return getattr(self, "_voice_ok", False)
+
+    def vara_voice_install(self):
+        if not self._admin_ready:
+            raise NeedPassword()
+
+        def finish():
+            self._voice_ok = True
+            self.update_settings({"varaVoice": True})
+        steps = ["Installing espeak-ng, xdotool and playerctl…", "Setting up Vara's speech engine…",
+                 "Downloading the speech recognition model…", "Downloading Vara's voice…"]
+        return self.jobs.start("vara-voice", "Installing Vara Voice", [], target="vara-voice", runner=self._simulate(steps, 5, finish))
+
+    def vara_voice_status(self):
+        st = super().vara_voice_status()
+        return {**st, "running": st["installed"] and st["enabled"]}
+
+    def sync_vara_voice(self):
+        on = self._voice_installed() and self.settings.get("varaVoice")
+        self._voice_state = {"state": "idle" if on else "off", "text": ""}
+        self.bus.publish("varaVoice", **self._voice_state)
+
+    def stop_vara_voice(self):
+        pass
+
     # ---- Settings > Apps (simulated origins; startup entries in a sample folder) ------------------
     def _startup_dirs(self):
         folder = self.files.home.parent / "dev-autostart"

@@ -212,6 +212,17 @@ class PlanValidationTests(unittest.TestCase):
         self.assertNotIn("performanceProfile", odd["extraSettings"])
         self.assertIsNone(odd["polyAccount"])
 
+    def test_vara_from_setup(self):
+        """Developer edition: "Yes, set up Vara" and its AI key come along; other editions can't ask for it."""
+        cfg = {"provider": "claude", "endpoint": "https://api.anthropic.com/", "model": "claude-opus-5", "apiKey": "sk-ant-1234567890"}
+        dev = installer.validate_plan(self.plan(edition="developer", vara=True, varaConfig=cfg))
+        self.assertEqual(dev["varaConfig"], {**cfg, "endpoint": "https://api.anthropic.com"})
+        self.assertTrue(dev["firstStart"]["vara"])
+        for bad in ({**cfg, "endpoint": "http://evil.example"}, {**cfg, "apiKey": "has spaces in it"}, "sk-123"):
+            with self.subTest(bad=bad):
+                self.assertIsNone(installer.validate_plan(self.plan(edition="developer", vara=True, varaConfig=bad))["varaConfig"])
+        self.assertIsNone(installer.validate_plan(self.plan(edition="gaming", vara=True, varaConfig=cfg))["varaConfig"])
+
     def test_blank_password_allowed(self):
         clean = installer.validate_plan(self.plan(user={"fullName": "", "username": "andrew", "password": ""}))
         self.assertEqual(clean["user"]["fullName"], "andrew")

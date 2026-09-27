@@ -461,3 +461,127 @@ class ClaudeTests(unittest.TestCase):
         result = second["messages"][-1]["content"][0]
         self.assertEqual((result["type"], result["tool_use_id"]), ("tool_result", "toolu_1"))
         self.assertIn("robot.py", result["content"])
+
+
+class AroundTheClockTests(unittest.TestCase):
+    """Reminders and routines (vara_schedule.py) and what Vara Voice is given to say."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        root = Path(self.tmp.name)
+        self.backend = MockBackend(Settings(root / "settings.json"), EventBus(), home=root / "home")
+        self.vara = self.backend.vara
+        self.now = [1_800_000_000.0]
+        self.vara.schedule.clock = lambda: self.now[0]
+
+    def tearDown(self):
+        self.vara.stop()
+        self.vara.wait(5)
+        self.tmp.cleanup()
+
+    def test_parse_when(self):
+        import datetime
+
+        from polyos.vara_schedule import parse_when
+        now = datetime.datetime(2026, 9, 27, 16, 0)
+        self.assertEqual(parse_when("17:30", None, now), datetime.datetime(2026, 9, 27, 17, 30))
+        self.assertEqual(parse_when("09:00", None, now), datetime.datetime(2026, 9, 28, 9, 0))  # tomorrow
+        self.assertEqual(parse_when("2026-10-01 08:15", None, now), datetime.datetime(2026, 10, 1, 8, 15))
+        self.assertEqual(parse_when(None, 10, now), datetime.datetime(2026, 9, 27, 16, 10))
+        for bad in ("25:00", "tomorrow", "2026-02-30 10:00", "2020-01-01 10:00"):
+            with self.subTest(bad=bad), self.assertRaises(ApiError):
+                parse_when(bad, None, now)
+
+    def test_weekdays_skip_the_weekend(self):
+        import datetime
+
+        from polyos.vara_schedule import next_time
+        friday = datetime.datetime(2026, 10, 2, 8, 0)
+        self.assertEqual(next_time(friday, "weekdays", friday).weekday(), 0)  # Monday
+        self.assertIsNone(next_time(friday, "once", friday))
+
+    def test_reminder_fires_once_and_is_announced(self):
+        import datetime
+        ctx = ToolContext(home=self.backend.files.home, workspace=self.backend.files.home, schedule=self.vara.schedule)
+        when = datetime.datetime.fromtimestamp(self.now[0] + 600)
+        out = vara_tools.TOOLS["set_reminder"].run(ctx, {"text": "Call Sam", "at": f"{when:%Y-%m-%d %H:%M}"})
+        self.assertIn("Call Sam", out)
+        self.assertEqual(self.vara.run_due(self.backend), [])  # not yet
+        self.now[0] += 700
+        fired = self.vara.run_due(self.backend)
+        self.assertEqual([i["text"] for i in fired], ["Call Sam"])
+        said = self.vara.said()["items"]
+        self.assertEqual((said[-1]["kind"], said[-1]["text"]), ("reminder", "Reminder: Call Sam"))
+        self.assertEqual(self.vara.schedule.items(), [])  # a one-off is gone
+        self.assertEqual(self.vara.said(said[-1]["id"])["items"], [])
+
+    def test_daily_routine_runs_and_repeats(self):
+        item = self.vara.schedule.add("routine", "set volume to 30",
+                                      __import__("datetime").datetime.fromtimestamp(self.now[0] + 60), "daily")
+        self.now[0] += 61
+        self.vara.run_due(self.backend)
+        self.vara.wait(10)
+        self.assertEqual(self.backend.system_status()["volume"]["level"], 30)
+        self.assertEqual(self.vara.said()["items"][-1]["kind"], "routine")
+        left = self.vara.schedule.items()
+        self.assertEqual(len(left), 1)
+        self.assertAlmostEqual(left[0]["at"], item["at"] + 86400, delta=1)
+        vara_tools.TOOLS["cancel_scheduled"].run(ToolContext(home=Path("/"), workspace=Path("/"), schedule=self.vara.schedule),
+                                                 {"id": item["id"]})
+        self.assertEqual(self.vara.schedule.items(), [])
+
+    def test_spoken_requests_are_answered_out_loud(self):
+        self.vara.chat(self.backend, "set volume to 45", source="voice")
+        said = self.vara.said()["items"]
+        self.assertEqual(said[-1]["kind"], "reply")
+        self.assertIn("45", said[-1]["text"])
+        self.vara.chat(self.backend, "mute")  # typed: nothing to say
+        self.assertEqual(self.vara.said(said[-1]["id"])["items"], [])
+
+    def test_spoken_request_to_the_model_and_its_approval(self):
+        fake = FakeModel()
+        self.addCleanup(fake.close)
+        fake.replies = [call("write_file", path="notes.txt", content="hi"), {"content": "I wrote **notes.txt**."}]
+        self.vara.config.update(fake.url, "test-model", "sk-secret")
+        self.vara.chat(self.backend, "make a notes file", source="voice")
+        end = time.monotonic() + 10
+        while not self.vara.state()["pending"] and time.monotonic() < end:
+            time.sleep(0.02)
+        ask = self.vara.said()["items"][-1]
+        self.assertEqual(ask["kind"], "approval")
+        self.assertIn("Say yes or no", ask["text"])
+        self.vara.approve(ask["step"], "allow")
+        self.vara.wait(10)
+        self.assertEqual(self.vara.said()["items"][-1]["text"], "I wrote **notes.txt**.")
+        system = fake.requests[0]["messages"][0]["content"]
+        self.assertIn("This request was spoken", system)
+
+
+class WebAndMemoryToolTests(unittest.TestCase):
+    PAGE = """<div class="result results_links results_links_deep web-result ">
+      <h2 class="result__title"><a rel="nofollow" class="result__a"
+         href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.debian.org%2F&amp;rut=abc">Debian &ndash; The <b>Universal</b> OS</a></h2>
+      <a class="result__snippet" href="x">Debian is a <b>free</b> operating system.</a></div>
+    <div class="result result--ad results_links"><a class="result__a" href="https://ads.example/">Buy now</a></div>
+    <div class="result results_links web-result "><a class="result__a" href="https://wiki.debian.org/">Debian Wiki</a></div>"""
+
+    def test_search_results(self):
+        results = vara_tools.parse_search_results(self.PAGE)
+        self.assertEqual([r["url"] for r in results], ["https://www.debian.org/", "https://wiki.debian.org/"])
+        self.assertEqual(results[0]["title"], "Debian – The Universal OS")
+        self.assertEqual(results[0]["snippet"], "Debian is a free operating system.")
+
+    def test_forget(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            memory = Memory(Path(tmp) / "memory.json")
+            memory.add("Uses an Arduino Uno")
+            memory.add("Prints in PETG")
+            ctx = ToolContext(home=Path(tmp), workspace=Path(tmp), memory=memory)
+            self.assertIn("Arduino", vara_tools.TOOLS["forget"].run(ctx, {"about": "arduino"}))
+            self.assertEqual([n["note"] for n in memory.notes()], ["Prints in PETG"])
+
+    def test_browser_addresses(self):
+        self.assertEqual(vara_tools._web_address("docs.python.org/3/"), "https://docs.python.org/3/")
+        self.assertEqual(vara_tools._web_address("https://x.org/a?b=1"), "https://x.org/a?b=1")
+        with self.assertRaises(ToolError):
+            vara_tools._web_address("file:///etc/passwd")

@@ -26,6 +26,7 @@ import tempfile
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -63,6 +64,7 @@ class ToolContext:
     backend: object = None
     skills: object = None
     memory: object = None
+    schedule: object = None  # reminders and routines (vara_schedule.Schedule)
     cancel: threading.Event = field(default_factory=threading.Event)
     gentle: bool = False  # background activity limited: programs run at low CPU priority
 
@@ -588,11 +590,192 @@ def fetch_url(ctx: ToolContext, args: dict) -> str:
     return clip(f"{url}\n\n{text}", 16_000)
 
 
+def parse_search_results(page: str, limit: int = 8) -> list[dict]:
+    """DuckDuckGo's HTML results page -> [{title, url, snippet}] (ads left out)."""
+    out = []
+    for block in re.split(r'<div class="result ', page)[1:]:
+        if block.startswith(("result--ad", "results_links_deep result--ad")) or "result--ad" in block[:200]:
+            continue
+        link = re.search(r'class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>', block, re.S)
+        if not link:
+            continue
+        href = html.unescape(link.group(1))
+        target = re.search(r"[?&]uddg=([^&]+)", href)
+        url = urllib.parse.unquote(target.group(1)) if target else ("https:" + href if href.startswith("//") else href)
+        if not url.startswith(("http://", "https://")):
+            continue
+        snippet = re.search(r'class="result__snippet"[^>]*>(.*?)</a>', block, re.S)
+        clean = lambda t: " ".join(html.unescape(re.sub(r"<[^>]+>", "", t)).split())  # noqa: E731
+        out.append({"title": clean(link.group(2)), "url": url, "snippet": clean(snippet.group(1)) if snippet else ""})
+        if len(out) >= limit:
+            break
+    return out
+
+
+def web_search(ctx: ToolContext, args: dict) -> str:
+    query = " ".join(str(args.get("query") or "").split())
+    if not query:
+        raise ToolError("Say what to search for.")
+    data = urllib.parse.urlencode({"q": query, "kl": "us-en"}).encode()
+    req = urllib.request.Request("https://html.duckduckgo.com/html/", data=data, method="POST",
+                                 headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) PolyOS-Vara/1.0",
+                                          "Content-Type": "application/x-www-form-urlencoded"})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as res:
+            page = res.read(2_000_000).decode("utf-8", "replace")
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise ToolError(f"The web search didn't answer ({getattr(exc, 'reason', exc)}). Check the internet connection.") from None
+    results = parse_search_results(page)
+    if not results:
+        raise ToolError("The search found nothing (or the search service is busy). Try other words, or fetch_url a known site.")
+    return "\n\n".join(f"{n}. {r['title']}\n{r['url']}\n{r['snippet']}" for n, r in enumerate(results, 1)) + \
+        "\n\nRead a result with fetch_url before relying on it."
+
+
+# ---- the web browser, by keyboard shortcuts (xdotool) -------------------------------------------------
+
+BROWSER_CLASS = "firefox|Navigator|chromium|google-chrome|brave|microsoft-edge|vivaldi|librewolf"
+BROWSER_KEYS = {"back": "alt+Left", "forward": "alt+Right", "reload": "F5", "new_tab": "ctrl+t", "close_tab": "ctrl+w",
+                "next_tab": "ctrl+Tab", "previous_tab": "ctrl+shift+Tab", "scroll_down": "Page_Down", "scroll_up": "Page_Up",
+                "top": "Home", "bottom": "End", "zoom_in": "ctrl+plus", "zoom_out": "ctrl+minus", "zoom_reset": "ctrl+0"}
+BROWSER_ACTIONS = ("open", "search", *BROWSER_KEYS, "find", "read_page", "current")
+
+
+def _xdotool(*args: str, timeout: float = 10) -> str:
+    proc = subprocess.run(["xdotool", *args], capture_output=True, text=True, timeout=timeout)
+    return proc.stdout.strip() if proc.returncode == 0 else ""
+
+
+def browser_window() -> str | None:
+    """The browser window to act on: the active one if it's a browser, else the newest browser window."""
+    ids = _xdotool("search", "--onlyvisible", "--class", BROWSER_CLASS).split()
+    if not ids:
+        return None
+    active = _xdotool("getactivewindow")
+    return active if active in ids else ids[-1]
+
+
+def _web_address(text: str) -> str:
+    text = text.strip()
+    if re.match(r"^https?://\S+$", text):
+        return text
+    if re.match(r"^[\w-]+(\.[\w-]+)+(/\S*)?$", text):  # youtube.com, docs.python.org/3/
+        return "https://" + text
+    raise ToolError("Give a web address like https://example.com or example.com.")
+
+
+def _clipboard() -> str:
+    proc = subprocess.run(["xclip", "-o", "-selection", "clipboard"], capture_output=True, text=True, timeout=5)
+    return proc.stdout if proc.returncode == 0 else ""
+
+
+def browser(ctx: ToolContext, args: dict) -> str:
+    action = str(args.get("action") or "").strip()
+    if action not in BROWSER_ACTIONS:
+        raise ToolError(f"action is one of: {', '.join(BROWSER_ACTIONS)}.")
+    if action in ("open", "search"):
+        url = _web_address(str(args.get("url") or "")) if action == "open" else \
+            "https://duckduckgo.com/?" + urllib.parse.urlencode({"q": str(args.get("query") or args.get("text") or "")})
+        if action == "search" and not (args.get("query") or args.get("text")):
+            raise ToolError("Say what to search for.")
+        subprocess.Popen(["xdg-open", url], start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return f"Opened {url} in the web browser."
+    win = browser_window()
+    if not win:
+        raise ToolError("No web browser window is open. Use action “open” first.")
+    title = _xdotool("getwindowname", win)
+    if action == "current":
+        return f"The browser is showing: {title}"
+    _xdotool("windowactivate", "--sync", win)
+    if action in BROWSER_KEYS:
+        _xdotool("key", "--clearmodifiers", "--window", win, BROWSER_KEYS[action])
+        return f"Browser: {action.replace('_', ' ')} (on “{_short(title, 60)}”)."
+    if action == "find":
+        text = str(args.get("text") or "").strip()
+        if not text:
+            raise ToolError("Say what to find on the page.")
+        _xdotool("key", "--clearmodifiers", "ctrl+f")
+        _xdotool("type", "--delay", "8", text[:200])
+        _xdotool("key", "Return")
+        return f"Looking for “{text[:200]}” on the page."
+    # read_page: the address bar's address (restoring the clipboard), then the page itself
+    if not which("xclip"):
+        raise ToolError("Reading the open page needs xclip (sudo apt install xclip).")
+    saved = _clipboard()
+    _xdotool("key", "--clearmodifiers", "ctrl+l")
+    _xdotool("key", "--clearmodifiers", "ctrl+c")
+    _xdotool("key", "Escape")
+    time.sleep(0.3)
+    url = _clipboard().strip()
+    if saved:
+        subprocess.run(["xclip", "-selection", "clipboard"], input=saved, text=True, timeout=5, check=False)
+    if not re.match(r"^https?://", url):
+        raise ToolError(f"Couldn't read the address of “{title}”.")
+    return fetch_url(ctx, {"url": url})
+
+
+# ---- music and videos (MPRIS, through playerctl) ----------------------------------------------------
+
+MEDIA_ACTIONS = ("play", "pause", "play-pause", "next", "previous", "stop", "status")
+
+
+def media(ctx: ToolContext, args: dict) -> str:
+    action = str(args.get("action") or "").strip()
+    if action not in MEDIA_ACTIONS:
+        raise ToolError(f"action is one of: {', '.join(MEDIA_ACTIONS)}.")
+    if action != "status":
+        proc = subprocess.run(["playerctl", action], capture_output=True, text=True, timeout=10)
+        if proc.returncode != 0:
+            raise ToolError("Nothing is playing (no music or video app is open).")
+    status = subprocess.run(["playerctl", "status"], capture_output=True, text=True, timeout=10).stdout.strip()
+    what = subprocess.run(["playerctl", "metadata", "--format", "{{artist}} - {{title}}"], capture_output=True, text=True,
+                          timeout=10).stdout.strip().strip(" -")
+    return f"{status or 'Stopped'}{f': {what}' if what else ''}."
+
+
+# ---- around the clock: reminders and routines ------------------------------------------------------
+
+def set_reminder(ctx: ToolContext, args: dict) -> str:
+    from .vara_schedule import describe, parse_when
+    item = ctx.schedule.add("reminder", args.get("text", ""), parse_when(args.get("at"), args.get("in_minutes")),
+                            args.get("repeat") or "once")
+    return "Set: " + describe(item)
+
+
+def schedule_routine(ctx: ToolContext, args: dict) -> str:
+    from .vara_schedule import describe, parse_when
+    item = ctx.schedule.add("routine", args.get("request", ""), parse_when(args.get("at"), args.get("in_minutes")),
+                            args.get("repeat") or "once")
+    return "Scheduled: " + describe(item)
+
+
+def list_scheduled(ctx: ToolContext, args: dict) -> str:
+    from .vara_schedule import describe
+    return "\n".join(describe(i) for i in ctx.schedule.items()) or "No reminders or routines."
+
+
+def cancel_scheduled(ctx: ToolContext, args: dict) -> str:
+    from .vara_schedule import describe
+    return "Cancelled: " + describe(ctx.schedule.cancel(str(args.get("id") or "").strip()))
+
+
 # ---- memory and skills --------------------------------------------------------------------------
 
 def remember(ctx: ToolContext, args: dict) -> str:
     ctx.memory.add(args.get("note", ""))
     return "Saved to memory."
+
+
+def forget(ctx: ToolContext, args: dict) -> str:
+    """Forget the notes that contain some text (the person asked Vara to forget something)."""
+    about = " ".join(str(args.get("about") or "").split()).casefold()
+    if not about:
+        raise ToolError("Say what to forget.")
+    notes = ctx.memory.notes()
+    gone = [n["note"] for n in notes if about in n["note"].casefold()]
+    for index in sorted((i for i, n in enumerate(notes) if about in n["note"].casefold()), reverse=True):
+        ctx.memory.forget(index)
+    return f"Forgot: {'; '.join(gone)}" if gone else f"Nothing in memory mentions “{about}”."
 
 
 def load_skill(ctx: ToolContext, args: dict) -> str:
@@ -612,6 +795,12 @@ def _p(desc: str, kind: str = "string") -> dict:
 
 CWD = _p("Folder to run in (default: the workspace)")
 TIMEOUT = _p("Seconds before it's stopped", "integer")
+
+
+def _when(args: dict) -> str:
+    """For the approval card: “daily at 08:00”, “once in 30 min”."""
+    at = f"at {args['at']}" if args.get("at") else f"in {args.get('in_minutes')} min"
+    return f"{args.get('repeat') or 'once'} {at}"
 
 
 def _short(text: str, n: int = 70) -> str:
@@ -692,6 +881,41 @@ TOOLS: dict[str, Tool] = {t.name: t for t in [
          "preferred language, where projects live). Not for passwords or one-off details.",
          {"note": _p("The note, one sentence")}, ["note"], READ, remember,
          lambda a: f"Remembered: {_short(a.get('note', ''), 50)}", icon="star"),
+    Tool("forget", "Forget", "Remove notes from memory that mention some text, when the person asks you to forget "
+         "something.", {"about": _p("Text the notes to forget contain")}, ["about"], READ, forget,
+         lambda a: f"Forgot notes about {_short(a.get('about', ''), 40)}", icon="star"),
+    Tool("web_search", "Search the web", "Search the web (DuckDuckGo) for current information, news, docs or "
+         "answers. Returns titles, addresses and snippets; read a result with fetch_url before relying on it.",
+         {"query": _p("What to search for")}, ["query"], READ, web_search,
+         lambda a: f"Searched the web for “{_short(a.get('query', ''), 40)}”", icon="search"),
+    Tool("browser", "Use the web browser", "Control the web browser on screen: open an address or a search in a "
+         "new tab; back, forward, reload, new_tab, close_tab, next_tab, previous_tab, scroll_down, scroll_up, top, "
+         "bottom, zoom_in, zoom_out, zoom_reset; find text on the page; current (the page title); read_page (the "
+         "open page as text).",
+         {"action": _p("One of: " + ", ".join(BROWSER_ACTIONS)), "url": _p("For open: the address"),
+          "query": _p("For search: what to search for"), "text": _p("For find: the text")},
+         ["action"], READ, browser, lambda a: f"Browser: {a.get('action', '').replace('_', ' ')} {_short(a.get('url') or a.get('query') or a.get('text') or '', 40)}".strip(),
+         needs=lambda: which("xdotool"), icon="globe"),
+    Tool("media", "Control music and video", "Play, pause, skip or check what's playing in any music or video app "
+         "(Spotify, the browser, VLC...).", {"action": _p("One of: " + ", ".join(MEDIA_ACTIONS))}, ["action"], READ,
+         media, lambda a: f"Media: {a.get('action', '')}", needs=lambda: which("playerctl"), icon="music"),
+    Tool("set_reminder", "Set a reminder", "Remind the person at a time (shown, and spoken if Vara Voice is on). "
+         "Use the local time from “Now” to work out at, or in_minutes for “in 10 minutes”.",
+         {"text": _p("What to remind them about"), "at": _p("“YYYY-MM-DD HH:MM” or “HH:MM” (24-hour, local)"),
+          "in_minutes": _p("Or: minutes from now", "number"), "repeat": _p("once (default), hourly, daily, weekdays or weekly")},
+         ["text"], READ, set_reminder, lambda a: f"Reminder: {_short(a.get('text', ''), 50)}", icon="clock"),
+    Tool("schedule_routine", "Schedule a routine", "Run a request on your own later or on repeat, e.g. every "
+         "weekday at 08:00 “summarize today's weather and news”. You'll do it with your tools and the person "
+         "sees and hears the answer.",
+         {"request": _p("The request, as the person would ask it"), "at": _p("“YYYY-MM-DD HH:MM” or “HH:MM”"),
+          "in_minutes": _p("Or: minutes from now", "number"), "repeat": _p("once, hourly, daily, weekdays or weekly")},
+         ["request"], WRITE, schedule_routine, lambda a: f"Routine: {_short(a.get('request', ''), 50)}",
+         detail=lambda a: _when(a) + f": {a.get('request', '')}",
+         icon="clock"),
+    Tool("list_scheduled", "List reminders and routines", "Every reminder and routine with its id and next time.",
+         {}, [], READ, list_scheduled, lambda a: "Checked reminders and routines", icon="clock"),
+    Tool("cancel_scheduled", "Cancel a reminder or routine", "Cancel a reminder or routine by its id (list_scheduled).",
+         {"id": _p("The id")}, ["id"], READ, cancel_scheduled, lambda a: f"Cancelled {a.get('id', '')}", icon="clock"),
     Tool("load_skill", "Load a skill", "Read one of your skills (step-by-step know-how) before a task it covers.",
          {"name": _p("Skill name from the list")}, ["name"], READ, load_skill,
          lambda a: f"Loaded the {a.get('name', '')} skill", icon="sparkle"),

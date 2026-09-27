@@ -1069,3 +1069,63 @@ class FirstStartTests(unittest.TestCase):
             self.assertEqual(done["title"], "PolyOS is all set up")
             self.assertIn("Restart", done["body"])
             self.assertIsNone(be.first_start_notice(seen))
+
+
+class VaraVoiceInstallTests(unittest.TestCase):
+    """polyos-admin vara-voice install: packages, the speech engine, the model and the voice."""
+
+    def test_install_lays_out_models(self):
+        import zipfile
+        from polyos import vara_voice
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "vara-voice"
+            (home / "bin").mkdir(parents=True)
+            (home / "bin" / "python3").write_text("")  # the venv already exists
+            ran = []
+
+            def fake_download(url, dest, start, span, what):
+                if url.endswith(".zip"):
+                    with zipfile.ZipFile(dest, "w") as zf:
+                        zf.writestr("vosk-model-small-en-us-0.15/conf/model.conf", "x")
+                        zf.writestr("vosk-model-small-en-us-0.15/am/final.mdl", "x")
+                else:
+                    dest.write_text("voice")
+
+            def fake_run(args, **kw):
+                ran.append(args[:3])
+                return mock.Mock(returncode=0, stdout="", stderr="")
+
+            events = []
+            with mock.patch.object(vara_voice, "VOICE_HOME", home), \
+                    mock.patch.object(vara_voice, "VOSK_MODEL", home / "models" / "vosk"), \
+                    mock.patch.object(vara_voice, "PIPER_VOICE", home / "models" / "piper" / "voice.onnx"), \
+                    mock.patch.object(admin, "apt_update"), mock.patch.object(admin, "has_candidate", return_value=True), \
+                    mock.patch.object(admin, "apt") as apt, mock.patch.object(admin, "_download", fake_download), \
+                    mock.patch.object(admin.subprocess, "run", fake_run), mock.patch.object(admin, "emit", events.append):
+                admin.vara_voice("install")
+                self.assertTrue((home / "models" / "vosk" / "conf" / "model.conf").exists())
+                self.assertTrue((home / "models" / "piper" / "voice.onnx").exists())
+                self.assertTrue((home / "models" / "piper" / "voice.onnx.json").exists())
+                self.assertIn("espeak-ng", apt.call_args[0][0])
+                self.assertTrue(any("pip" in a for a in ran))
+                self.assertIn("Hey Vera", events[-1]["message"])
+                admin.vara_voice("remove")
+                self.assertFalse(home.exists())
+
+    def test_first_start_installs_vara_when_chosen(self):
+        from polyos import drivers, firststart, installer
+        plan = installer.validate_plan({"mode": "erase", "disk": "/dev/sda", "edition": "developer", "vara": True,
+                                        "user": {"username": "dev", "password": ""}})
+        self.assertTrue(plan["firstStart"]["vara"])
+        self.assertTrue(plan["extraSettings"]["varaVoice"])
+        regular = installer.validate_plan({"mode": "erase", "disk": "/dev/sda", "vara": True, "user": {"username": "a"}})
+        self.assertFalse(regular["firstStart"]["vara"])  # only offered with the Developer edition
+        self.assertNotIn("varaVoice", regular["extraSettings"])
+        with tempfile.TemporaryDirectory() as tmp:
+            p, st = Path(tmp) / "plan.json", Path(tmp) / "st.json"
+            p.write_text(json.dumps(firststart.clean_plan([], None, drivers.DRIVER_PACKAGE_RE, vara=True)))
+            voice = mock.Mock()
+            out = firststart.run(lambda e: None, mock.Mock(), mock.Mock(), lambda: True, p, st, install_voice=voice)
+            voice.assert_called_once()
+            self.assertEqual(out["state"], "done")
+            self.assertTrue(out["varaDone"])

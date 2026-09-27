@@ -463,6 +463,10 @@ def validate_plan(plan: dict, existing_users: set[str] | None = None) -> dict:
     profile = plan.get("profile") if plan.get("profile") in hwcheck.PROFILE_SETTINGS else None
     background = plan.get("background") if plan.get("background") in ("normal", "reduced") else None
     look = {**(hwcheck.PROFILE_SETTINGS[profile] if profile else {}), **({"backgroundLimit": background} if background else {})}
+    # Vara, the voice assistant: offered with the Developer edition only, and only when asked for
+    vara = edition == "developer" and plan.get("vara") is True
+    if vara:
+        look["varaVoice"] = True
     clean = {"mode": mode, "disk": disk, "hostname": hostname, "timezone": tz,
              "user": {"username": username, "fullName": full, "password": password, "recoveryKey": str(key)},
              "appearance": {"theme": theme, "accent": accent.lower()}, "edition": edition,
@@ -472,8 +476,9 @@ def validate_plan(plan: dict, existing_users: set[str] | None = None) -> dict:
                                "showAllApps": edition == "developer", "gameMode": edition == "gaming",
                                "editionSetup": True},
              "firstStart": firststart.clean_plan(plan.get("drivers") or [], edition if edition != "regular" else None,
-                                                 drivers.DRIVER_PACKAGE_RE),
-             "polyAccount": poly_account_state(plan.get("polyAccount"))}
+                                                 drivers.DRIVER_PACKAGE_RE, vara=vara),
+             "polyAccount": poly_account_state(plan.get("polyAccount")),
+             "varaConfig": vara_config(plan.get("varaConfig")) if vara else None}
     if layout:
         clean.update(layout)
     if mode == "space":
@@ -487,6 +492,17 @@ def validate_plan(plan: dict, existing_users: set[str] | None = None) -> dict:
             raise InstallError(f"Give PolyOS at least {MIN_ROOT // GiB} GB.")
         clean["size"] = size
     return clean
+
+
+def vara_config(cfg) -> dict | None:
+    """Vara's AI provider and key, given in setup (Developer edition), for the new account."""
+    if not isinstance(cfg, dict):
+        return None
+    endpoint, model, key = (str(cfg.get(k) or "").strip() for k in ("endpoint", "model", "apiKey"))
+    if not re.fullmatch(r"https://\S{4,200}", endpoint) or not 0 < len(model) <= 200 or not re.fullmatch(r"\S{8,500}", key):
+        return None
+    return {"endpoint": endpoint.rstrip("/"), "model": model, "apiKey": key,
+            "provider": cfg.get("provider") if cfg.get("provider") in ("openai", "claude") else "openai"}
 
 
 def poly_account_state(state) -> dict | None:
@@ -1309,6 +1325,11 @@ class Installer:
             except (OSError, ValueError):
                 pass
         self._write(f"{home}/.config/polyos/settings.json", json.dumps(settings, indent=2) + "\n")
+        if self.plan.get("varaConfig"):  # Vara's AI provider and key, from setup (readable by the account only)
+            from .vara import DEFAULT_CONFIG
+            self._write(f"{home}/.config/polyos/vara.json", json.dumps({**DEFAULT_CONFIG, **self.plan["varaConfig"]}, indent=2) + "\n")
+            if not self.dry:
+                os.chmod(TARGET / home / ".config/polyos/vara.json", 0o600)
         if self.plan.get("polyAccount"):  # connected during setup: this computer stays connected
             self._write(f"{home}/.config/polyos/poly-account.json", json.dumps(self.plan["polyAccount"], indent=2) + "\n")
             if not self.dry:

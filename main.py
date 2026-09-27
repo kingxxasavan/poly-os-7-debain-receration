@@ -397,6 +397,7 @@ def cmd_dev(args) -> None:
     if args.live:
         settings_path.unlink(missing_ok=True)  # a live USB starts fresh every boot
     backend = MockBackend(Settings(settings_path), EventBus(), live=args.live)
+    backend.vara.start_scheduler(backend)  # reminders and routines, as in the real shell
     server = Server(backend, ROOT / "ui", secrets.token_urlsafe(24), dev=True, port=args.port)
     server.start()
     url = f"{server.base_url}/"

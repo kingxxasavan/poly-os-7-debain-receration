@@ -77,6 +77,7 @@
     <keybind key="W-s"><action name="Execute"><command>polyos-ctl popup launcher</command></action></keybind>
     <keybind key="W-r"><action name="Execute"><command>polyos-ctl popup run</command></action></keybind>
     <keybind key="W-v"><action name="Execute"><command>polyos-ctl popup vara</command></action></keybind>
+    <keybind key="W-S-v"><action name="Execute"><command>polyos-ctl vara listen</command></action></keybind>
     <keybind key="XF86LaunchA"><action name="Execute"><command>polyos-ctl popup launcher</command></action></keybind>
     <keybind key="W-i"><action name="Execute"><command>polyos-ctl open settings</command></action></keybind>
     <keybind key="W-e"><action name="Execute"><command>polyos-ctl run files</command></action></keybind>

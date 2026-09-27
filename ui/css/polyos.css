@@ -1014,6 +1014,8 @@ select.su-input option { background: #202024; color: #fff; }
 .su-warn { display: flex; align-items: center; gap: 10px; margin: 16px 0 4px; max-width: 560px; color: #f1a1a1; font-weight: 600; font-size: 14px; }
 .su-check { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: 14px; cursor: default; }
 .su-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 14px; }
+.su-vara-head { display: flex; align-items: flex-start; gap: 18px; }
+.su-vara-head img { width: 64px; height: 54px; object-fit: contain; margin-top: 4px; }
 .su-chip { height: 34px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--su-line); background: var(--su-raised); color: inherit; font-size: 13.5px; }
 .su-chip:hover { background: var(--su-raised-2); }
 .su-chip.on { background: var(--accent); border-color: transparent; color: #fff; }
@@ -1163,6 +1165,22 @@ select.su-input option { background: #202024; color: #fff; }
 .va-input:focus-visible { outline: none; }
 .va-send { flex: none; width: 38px; height: 38px; border: 0; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: #fff; }
 .va-send .ico { font-size: 18px; }
+.va-mic { flex: none; width: 38px; height: 38px; border: 0; border-radius: 50%; display: grid; place-items: center; background: transparent; color: var(--text-2); }
+.va-mic:hover { background: var(--hover); color: var(--text); }
+.va-mic .ico { font-size: 19px; }
+.va-mic.on { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--accent); }
+.va-voice { display: flex; align-items: center; gap: 10px; margin: 10px 14px 0; padding: 10px 14px; border-radius: 16px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); font-size: 13px; }
+.va-voice b { font-weight: 600; flex: none; }
+.va-voice span:last-child { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.va-orb { display: inline-flex; align-items: center; gap: 3px; height: 16px; flex: none; }
+.va-orb i { width: 4px; height: 6px; border-radius: 2px; background: var(--accent); animation: va-wave 0.9s ease-in-out infinite; }
+.va-orb i:nth-child(2) { animation-delay: 0.15s; }
+.va-orb i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes va-wave { 0%, 100% { height: 5px; } 50% { height: 15px; } }
+@media (prefers-reduced-motion: reduce) { .va-orb i { animation: none; height: 10px; } }
+.va-source { display: inline-flex; vertical-align: -2px; margin-right: 6px; opacity: 0.75; }
+.va-source .ico { font-size: 13px; }
 .va-msg.vara { white-space: normal; }
 .va-msg.vara p { margin: 0; white-space: pre-wrap; }
 .va-msg.vara p + p, .va-msg.vara p + pre, .va-msg.vara pre + p { margin-top: 8px; }

@@ -7,6 +7,7 @@
     polyos-admin account FILE              for the sudo user: {"password"} and/or {"recoveryKey"} (file deleted)
     polyos-admin reboot                    restart right away (after installing, from the live USB)
     polyos-admin first-start               after installing: the drivers and edition apps setup chose (a timer runs it)
+    polyos-admin vara-voice install|remove Vara Voice: speech recognition and a voice for Vara (/opt/polyos/vara-voice)
     polyos-admin app remove DESKTOP_ID     Settings > Apps: uninstall the Debian package or Flatpak behind an app
     polyos-admin disk delete DISK NUMBER   the installer's drive screen: delete a partition (live USB only)
     polyos-admin disk new DISK START BYTES     ... or make one in unallocated space (START in sectors)
@@ -393,6 +394,81 @@ def reboot() -> None:
         pass
 
 
+# Vara Voice: offline speech recognition (Vosk, a small English model) and a natural voice (Piper),
+# in their own Python environment, plus the tools Vara's browser and media control use.
+VOICE_PACKAGES = ["espeak-ng", "xdotool", "xclip", "playerctl", "pipewire-bin", "python3-venv"]
+VOICE_PIP = ["vosk>=0.3.45,<0.4", "piper-tts>=1.3,<2"]
+VOSK_MODEL_URL = "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
+PIPER_VOICE_URL = "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx"
+
+
+def _download(url: str, dest: Path, start: float, span: float, what: str) -> None:
+    import urllib.request
+    tmp = dest.with_name(dest.name + ".part")
+    req = urllib.request.Request(url, headers={"User-Agent": "PolyOS-VaraVoice/1.0"})
+    with urllib.request.urlopen(req, timeout=60) as res, open(tmp, "wb") as out:  # noqa: S310 - https
+        total = int(res.headers.get("Content-Length") or 0)
+        got = 0
+        while chunk := res.read(1 << 20):
+            out.write(chunk)
+            got += len(chunk)
+            if total:
+                emit({"progress": start + span * got / total, "message": f"Downloading {what}… {got * 100 // total}%"})
+    os.replace(tmp, dest)
+
+
+def vara_voice(action: str) -> None:
+    """Install (or remove) Vara Voice. Downloads: about 150 MB."""
+    import urllib.error
+    import zipfile
+
+    from . import vara_voice as voice
+    home = voice.VOICE_HOME
+    if action == "remove":
+        shutil.rmtree(home, ignore_errors=True)
+        return emit({"progress": 1.0, "message": "Vara Voice is removed."})
+    if action != "install":
+        raise AdminError("Say install or remove.")
+    apt_update()
+    available = [p for p in VOICE_PACKAGES if has_candidate(p)]
+    if available:
+        apt(["install", *available], start=0.05)
+    emit({"progress": 0.25, "message": "Setting up Vara's speech engine…"})
+    home.mkdir(parents=True, exist_ok=True)
+    if not (home / "bin" / "python3").exists():
+        venv = subprocess.run([shutil.which("python3") or "/usr/bin/python3", "-m", "venv", str(home)],
+                              capture_output=True, text=True, timeout=300)
+        if venv.returncode != 0:
+            raise AdminError("Couldn't make Vara Voice's Python environment: " + venv.stderr.strip()[-300:])
+    pip = subprocess.run([str(home / "bin" / "python3"), "-m", "pip", "install", "--quiet", "--disable-pip-version-check",
+                          "--upgrade", *VOICE_PIP], capture_output=True, text=True, timeout=1800)
+    if pip.returncode != 0:
+        raise AdminError("Vara's speech engine didn't install: " + ((pip.stderr or pip.stdout).strip().splitlines() or ["pip failed"])[-1])
+    models = home / "models"
+    try:
+        if not (voice.VOSK_MODEL / "conf").is_dir():
+            models.mkdir(exist_ok=True)
+            archive = models / "vosk.zip"
+            _download(VOSK_MODEL_URL, archive, 0.45, 0.25, "the speech recognition model")
+            with zipfile.ZipFile(archive) as zf:
+                top = sorted({n.split("/", 1)[0] for n in zf.namelist() if n.strip("/")})
+                zf.extractall(models)  # zipfile drops ".." and absolute paths
+            archive.unlink()
+            shutil.rmtree(voice.VOSK_MODEL, ignore_errors=True)
+            (models / top[0]).rename(voice.VOSK_MODEL)
+        if not voice.PIPER_VOICE.exists():
+            voice.PIPER_VOICE.parent.mkdir(parents=True, exist_ok=True)
+            _download(PIPER_VOICE_URL + ".json", voice.PIPER_VOICE.with_suffix(".onnx.json"), 0.7, 0.02, "Vara's voice")
+            _download(PIPER_VOICE_URL, voice.PIPER_VOICE, 0.72, 0.23, "Vara's voice")
+    except (urllib.error.URLError, OSError, zipfile.BadZipFile, IndexError) as exc:
+        raise AdminError(f"A download for Vara Voice didn't finish ({getattr(exc, 'reason', exc)}). Try again.") from None
+    check = subprocess.run([str(home / "bin" / "python3"), "-c", "import vosk, piper"], capture_output=True, text=True, timeout=120)
+    if check.returncode != 0:
+        raise AdminError("Vara Voice installed, but its speech engine doesn't start: " + check.stderr.strip()[-300:])
+    subprocess.run(["chmod", "-R", "a+rX", str(home)], check=False)
+    emit({"progress": 1.0, "message": "Vara Voice is ready. Say “Hey Vera”."})
+
+
 def first_start() -> None:
     """After installing: the recommended drivers and the edition's apps, once online (firststart.py)."""
     import socket
@@ -418,7 +494,7 @@ def first_start() -> None:
         if ids:
             pack_install(name, ids)
 
-    firststart.run(emit, drivers_install, install_pack, online)
+    firststart.run(emit, drivers_install, install_pack, online, install_voice=lambda: vara_voice("install"))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -452,6 +528,8 @@ def main(argv: list[str] | None = None) -> int:
             reboot()
         elif cmd == "first-start":
             first_start()
+        elif cmd == "vara-voice" and len(rest) == 1:
+            vara_voice(rest[0])
         elif cmd == "app" and len(rest) == 2 and rest[0] == "remove":
             app_remove(rest[1])
         elif cmd == "disk" and rest[:1] in (["delete"], ["new"]):

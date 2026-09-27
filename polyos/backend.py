@@ -623,7 +623,8 @@ class Backend:
         names = {"gaming": "Gaming apps", "developer": "Developer tools"}
         if firststart.pending(plan) and not seen.get("firstStart"):
             seen["firstStart"] = True
-            parts = [x for x in (names.get(plan.get("pack")), "recommended drivers" if plan.get("drivers") else None) if x]
+            parts = [x for x in (names.get(plan.get("pack")), "recommended drivers" if plan.get("drivers") else None,
+                                 "Vara Voice" if plan.get("vara") else None) if x]
             return {"kind": "setting-up", "title": "Finishing setting up PolyOS",
                     "body": f"Your {' and '.join(parts)} are installing in the background (once you’re online). "
                             "You can use PolyOS in the meantime."}
@@ -632,9 +633,10 @@ class Backend:
             if st["state"] == "failed":
                 return {"kind": "setting-up", "title": "Some things didn’t install",
                         "body": "Install them from Settings › Apps and Settings › Drivers when you’re online."}
-            done = [x for x in (names.get(st.get("packDone")), "drivers" if st.get("drivers") == "done" else None) if x]
+            done = [x for x in (names.get(st.get("packDone")), "drivers" if st.get("drivers") == "done" else None,
+                                "Vara Voice (say “Hey Vera”)" if st.get("varaDone") else None) if x]
             return {"kind": "setting-up", "title": "PolyOS is all set up",
-                    "body": f"Your {' and '.join(done) or 'apps'} are installed."
+                    "body": f"Installed: {', '.join(done) or 'your apps'}."
                             + (" Restart when it suits you to start using the new drivers." if st.get("drivers") == "done" else "")}
         return None
 
@@ -1040,6 +1042,104 @@ class Backend:
             except Exception:  # noqa: BLE001 - the chat still shows the request when opened
                 log.debug("couldn't open Vara for an approval", exc_info=True)
 
+    # ---- Vara Voice (vara_voice.py): a process of its own, following the settings ----------------
+    def notify(self, title: str, body: str) -> None:
+        """A plain desktop notification (reminders)."""
+        from . import system
+        if system.have("notify-send"):
+            system.spawn(["notify-send", "-a", "PolyOS", "-i", "polyos", title, body])
+
+    def vara_voice_status(self) -> dict:
+        from . import vara_voice
+        proc = getattr(self, "_voice_proc", None)
+        return {"installed": self._voice_installed(), "enabled": bool(self.settings.get("varaVoice")),
+                "wake": bool(self.settings.get("varaVoiceWake")), "speak": bool(self.settings.get("varaVoiceSpeak")),
+                "running": bool(proc is not None and proc.poll() is None), "wakeWords": "Hey Vera",
+                **getattr(self, "_voice_state", {"state": "off", "text": ""}), "home": str(vara_voice.VOICE_HOME)}
+
+    def _voice_installed(self) -> bool:
+        from . import vara_voice
+        return vara_voice.installed()
+
+    def vara_voice_state(self, state: str, text: str = "") -> dict:
+        """From the voice process: listening, thinking, speaking or idle (the Vara chat shows it)."""
+        if state not in ("idle", "listening", "thinking", "speaking"):
+            raise ApiError("Unknown voice state.")
+        before = getattr(self, "_voice_state", {}).get("state")
+        self._voice_state = {"state": state, "text": text[:300]}
+        self.bus.publish("varaVoice", **self._voice_state)
+        # "Hey Vera": show the Vara panel listening, unless a full-screen app (a game, a video) is in front
+        if state == "listening" and before != "listening" and not getattr(self, "_fullscreen_app", False) \
+                and (self._popup or {}).get("view") != "vara":
+            try:
+                self.popup_request("vara")
+            except ApiError:
+                pass
+        return self._voice_state
+
+    def vara_voice_listen(self) -> dict:
+        """Push to talk (Win+Shift+V, or the microphone button in the Vara chat)."""
+        if not self.vara_voice_status()["running"]:
+            raise ApiError("Turn on Vara Voice in Settings › Vara first.", 409)
+        self.vara.announce("", "listen")
+        return {"ok": True}
+
+    def vara_voice_install(self) -> dict:
+        def done(job):
+            if job["state"] == "done":
+                self.update_settings({"varaVoice": True})
+            self.bus.publish("varaVoice", **getattr(self, "_voice_state", {"state": "off", "text": ""}))
+        return self.jobs.start("vara-voice", "Installing Vara Voice", ["vara-voice", "install"], target="vara-voice", on_done=done)
+
+    def sync_vara_voice(self) -> None:
+        """Start, stop or restart the voice process to match the settings (and bring it back if it quit)."""
+        from . import vara_voice
+        want = bool(self.settings.get("varaVoice")) and self._voice_installed() and not self._is_live()
+        args = [str(vara_voice.PYTHON), "-m", "polyos.vara_voice",
+                *([] if self.settings.get("varaVoiceSpeak") else ["--quiet"]),
+                *([] if self.settings.get("varaVoiceWake") else ["--no-wake"])]
+        proc = getattr(self, "_voice_proc", None)
+        running = proc is not None and proc.poll() is None
+        if running and (not want or getattr(self, "_voice_args", None) != args):
+            proc.terminate()
+            try:
+                proc.wait(5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+            running = False
+            self._voice_state = {"state": "off", "text": ""}
+            self.bus.publish("varaVoice", **self._voice_state)
+        if want and not running:
+            self._stop_stray_voice()
+            log_path = paths.state_dir() / "vara-voice.log"
+            env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parent.parent)}
+            with open(log_path, "ab") as log_file:
+                self._voice_proc = subprocess.Popen(args, env=env, stdin=subprocess.DEVNULL, stdout=log_file,
+                                                    stderr=subprocess.STDOUT, start_new_session=True)
+            self._voice_args = args
+            (paths.runtime_dir() / "vara-voice.pid").write_text(str(self._voice_proc.pid))
+
+    def stop_vara_voice(self) -> None:
+        """When the shell exits (a restart starts a new one)."""
+        proc = getattr(self, "_voice_proc", None)
+        if proc is not None and proc.poll() is None:
+            proc.terminate()
+        (paths.runtime_dir() / "vara-voice.pid").unlink(missing_ok=True)
+
+    def _stop_stray_voice(self) -> None:
+        """One left by a shell that crashed: only ever one Vara listening."""
+        pid_file = paths.runtime_dir() / "vara-voice.pid"
+        try:
+            pid = int(pid_file.read_text().strip())
+            cmdline = Path(f"/proc/{pid}/cmdline").read_bytes()
+        except (OSError, ValueError):
+            return
+        if b"polyos.vara_voice" in cmdline:
+            try:
+                os.kill(pid, 15)
+            except OSError:
+                pass
+
     def vara_test(self) -> dict:
         reply = complete(self.vara.config.load(), [{"role": "user", "content": "Reply with just the word: ready"}], timeout=60)
         return {"ok": True, "reply": reply[:200]}
@@ -1050,6 +1150,8 @@ class Backend:
         settings = self.settings.update(patch)
         self.bus.publish("settings", settings=settings)
         self._pa_push(patch)  # Poly Sync, when connected
+        if {"varaVoice", "varaVoiceWake", "varaVoiceSpeak"} & set(patch):
+            self.sync_vara_voice()
         return settings
 
     def wallpapers(self) -> list[dict]:

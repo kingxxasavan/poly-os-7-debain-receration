@@ -7,7 +7,12 @@ always with the person's own key. The model works as an agent: it reasons about 
 calls tools (files, terminal, git, Blender, OpenSCAD, ROS 2, arduino-cli, the desktop; see
 vara_tools.py), reads the results and carries on until the job is done, asking the person before
 anything that changes files or runs programs (Settings > Vara decides what needs a yes). It keeps
-skills (how-tos) and a memory of lasting notes (vara_skills.py).
+skills (how-tos) and a memory of lasting notes (vara_skills.py), and keeps reminders and routines
+(vara_schedule.py) that fire around the clock while PolyOS runs.
+
+Requests come typed, spoken (Vara Voice, vara_voice.py) or from a routine. Answers to spoken
+requests and routines, reminders and approval questions go to `announcements`, which Vara Voice
+reads out loud.
 
 The API key lives in ~/.config/polyos/vara.json (mode 600) and is never sent back to the UI, nor
 readable by Vara's own tools.
@@ -22,6 +27,7 @@ import os
 import platform
 import re
 import threading
+import time
 import urllib.error
 import urllib.request
 import uuid
@@ -29,6 +35,7 @@ from pathlib import Path
 
 from . import paths
 from .core import ApiError
+from .vara_schedule import Schedule
 from .vara_skills import Memory, Skills
 from .vara_tools import READ, RUN, TOOLS, WRITE, ToolContext, ToolError, clip, inside, installed_programs
 
@@ -77,7 +84,23 @@ How you work:
 - If a program is missing, say which PolyMarket app or command installs it (Blender, OpenSCAD, FreeCAD,
   KiCad and PrusaSlicer are in PolyMarket; `pip install --user`, `npm`, `cargo` work without admin rights).
 - Finish with a short summary of what you did and where the results are. Use Markdown code blocks for code.
-- Simple requests (open an app, volume, Wi-Fi, lock) PolyOS already handles; answer those plainly."""
+- Simple requests (open an app, volume, Wi-Fi, lock) PolyOS already handles; answer those plainly.
+- For current events, prices, weather or anything you're unsure of, use web_search, then fetch_url a result.
+- The browser tool drives the web browser on screen; media plays, pauses and skips music and videos.
+- set_reminder and schedule_routine work around the clock; confirm the exact time you set, in words."""
+
+VOICE_PROMPT = """## This request was spoken (Vara Voice)
+Your answer is read out loud. Answer in one to three short spoken sentences: no Markdown, lists, links or
+code. Say numbers and times the way people say them. When the answer needs code, a long list or a table,
+put it on screen (write a file and open it, or open a page) and say where it is. For approvals, the person
+answers by voice, so name the action plainly."""
+
+ROUTINE_PROMPT = """## This request is a routine the person scheduled earlier
+They may not be at the computer. Do it with your tools, then give a short spoken-style summary (one to
+three sentences, no Markdown): it's shown and read out loud."""
+
+SOURCES = ("typed", "voice", "routine")
+ANNOUNCE_KEEP = 50
 
 
 class VaraConfig:
@@ -289,6 +312,7 @@ class Vara:
         folder = config_path.parent / "vara"  # ~/.config/polyos/vara
         self.skills = Skills(paths.SHARE / "vara" / "skills", folder / "skills")
         self.memory = Memory(folder / "memory.json")
+        self.schedule = Schedule(folder / "schedule.json")
         self.bus = bus
         self.home = Path(home) if home else Path.home()
         self.history: list[dict] = []
@@ -303,6 +327,10 @@ class Vara:
         self._thread: threading.Thread | None = None
         self._no_tools = False
         self.on_attention = None  # called when an approval is waiting (the backend opens the chat)
+        self.source = "typed"  # where the request being worked on came from
+        self.announcements: list[dict] = []  # for Vara Voice to say: replies, reminders, approvals
+        self._announce_id = 0
+        self._scheduler: threading.Thread | None = None
 
     def workspace(self, cfg: dict | None = None) -> Path:
         raw = (cfg or self.config.load())["workspace"]
@@ -363,28 +391,49 @@ class Vara:
             self._thread.join(timeout)
         return self.state()
 
+    # ---- things to say out loud (Vara Voice) ----
+    def announce(self, text: str, kind: str = "reply", **extra) -> dict:
+        text = " ".join(str(text).split())
+        with self._lock:
+            self._announce_id += 1
+            item = {"id": self._announce_id, "kind": kind, "text": text, "at": time.time(), **extra}
+            self.announcements = [*self.announcements, item][-ANNOUNCE_KEEP:]
+        if self.bus is not None:
+            self.bus.publish("vara-say", item=item)
+        return item
+
+    def said(self, after: int = 0) -> dict:
+        with self._lock:
+            return {"items": [dict(a) for a in self.announcements if a["id"] > after], "last": self._announce_id}
+
     # ---- a message from the person ----
-    def chat(self, backend, message: str) -> dict:
+    def chat(self, backend, message: str, source: str = "typed") -> dict:
         message = message.strip()
         if not message:
             raise ApiError("Ask Vara something.")
+        source = source if source in SOURCES else "typed"
         with self._lock:
             if self.busy:
                 raise ApiError("Vara is still working on your last request. Wait, or press Stop.", 409)
-        self._add({"role": "user", "content": message})
+        self._add({"role": "user", "content": message, **({"source": source} if source != "typed" else {})})
         try:
             reply = local_intent(backend, message)
         except (RuntimeError, ApiError) as exc:
             self._add({"role": "assistant", "content": str(exc), "error": True})
+            if source != "typed":
+                self.announce(str(exc), "reply" if source == "voice" else "routine")
             return self.state()
         if reply is not None:
             self._add({"role": "assistant", "content": reply})
             with self._lock:  # the model hears about it too, for follow-ups
                 self.messages += [{"role": "user", "content": message}, {"role": "assistant", "content": reply}]
+            if source != "typed":
+                self.announce(reply, "reply" if source == "voice" else "routine")
             return self.state()
         with self._lock:
             self.messages.append({"role": "user", "content": message})
             self.busy = True
+            self.source = source
         self._cancel.clear()
         self._thread = threading.Thread(target=self._run, args=(backend,), name="vara", daemon=True)
         self._thread.start()
@@ -419,6 +468,10 @@ class Vara:
             f"- Your tools: {', '.join(t.name for t in tools)}",
             f"- Approval: {dict(ask='the person approves every change and command', workspace='file changes inside the workspace need no approval; commands do', auto='the person lets you act without asking')[cfg['approval']]}",
         ]
+        if self.source == "voice":
+            lines += ["", VOICE_PROMPT]
+        elif self.source == "routine":
+            lines += ["", ROUTINE_PROMPT]
         if skills:
             lines += ["", "## Skills (load_skill before using one)"]
             lines += [f"- {s['name']}: {s['description']}" for s in skills]
@@ -444,6 +497,8 @@ class Vara:
         return msgs
 
     def _run(self, backend) -> None:
+        with self._lock:
+            start = len(self.history)
         try:
             self._loop(backend)
         except (RuntimeError, ApiError, ToolError) as exc:
@@ -453,7 +508,11 @@ class Vara:
         finally:
             with self._lock:
                 self.busy, self.pending = False, None
+                source, self.source = self.source, "typed"
+                final = next((h for h in reversed(self.history[start:]) if h["role"] == "assistant" and not h.get("interim")), None)
             self._changed()
+            if source != "typed" and final:  # a spoken request or a routine: its answer is read out
+                self.announce(final["content"], "reply" if source == "voice" else "routine")
 
     def _loop(self, backend) -> None:
         cfg = self.config.load()
@@ -465,7 +524,8 @@ class Vara:
         settings = getattr(backend, "settings", None)
         gentle = bool(settings and settings.get("backgroundLimit") == "reduced")
         ctx = ToolContext(home=self.home, workspace=workspace if workspace.is_dir() else self.home,
-                          backend=backend, skills=self.skills, memory=self.memory, cancel=self._cancel, gentle=gentle)
+                          backend=backend, skills=self.skills, memory=self.memory, schedule=self.schedule,
+                          cancel=self._cancel, gentle=gentle)
         tools = [t for t in TOOLS.values() if t.available()]
         steps = GENTLE_STEPS if gentle else MAX_STEPS
         for _step in range(steps):
@@ -556,6 +616,9 @@ class Vara:
         self._changed()
         if self.on_attention:
             self.on_attention()
+        if self.source == "voice":  # asked out loud; "yes", "no" or "always" answers it
+            self.announce(f"Can I {tool.label.lower()}{f': {subject}' if subject else ''}? Say yes or no.",
+                          "approval", step=step["id"])
         answered = self._decision.wait(APPROVAL_TIMEOUT)
         answer = self._answer if answered and not self._cancel.is_set() else "deny"
         with self._lock:
@@ -563,6 +626,41 @@ class Vara:
         if answer == "always":
             self.allowed.add(tool.name)
         return answer in ("allow", "always")
+
+
+    # ---- around the clock: reminders and routines ----
+    def start_scheduler(self, backend, every: float = 20) -> None:
+        """Checks reminders and routines while PolyOS runs (the shell starts this once)."""
+        if self._scheduler is not None:
+            return
+
+        def loop():
+            while True:
+                try:
+                    self.run_due(backend)
+                except Exception:  # noqa: BLE001 - a bad item must never stop the clock
+                    pass
+                time.sleep(every)
+        self._scheduler = threading.Thread(target=loop, name="vara-schedule", daemon=True)
+        self._scheduler.start()
+
+    def run_due(self, backend, wait_busy: float = 600) -> list[dict]:
+        due = self.schedule.due()
+        for item in due:
+            if item["kind"] == "reminder":
+                self.announce(f"Reminder: {item['text']}", "reminder")
+                notify = getattr(backend, "notify", None)
+                if notify:
+                    notify("Reminder from Vara", item["text"])
+                continue
+            end = time.time() + wait_busy  # a routine waits for a request that's still running
+            while self.busy and time.time() < end:
+                time.sleep(2)
+            try:
+                self.chat(backend, item["text"], source="routine")
+            except ApiError as exc:
+                self.announce(f"I couldn't run your routine “{item['text']}”: {exc}", "routine")
+        return due
 
 
 RISK_LABELS = {READ: "Looks only", WRITE: "Changes files", RUN: "Runs programs"}
@@ -577,5 +675,6 @@ def tools_overview(vara: Vara) -> dict:
         "programs": {"installed": have, "missing": missing},
         "skills": vara.skills.list(),
         "memory": vara.memory.notes(),
+        "scheduled": vara.schedule.items(),
         "skillsFolder": str(vara.skills.user_dir),
     }

@@ -85,6 +85,10 @@ DEFAULTS: dict = {
     "performanceProfile": "full",  # "full" | "balanced" | "light": set by the hardware check (hwcheck.py)
     "backgroundLimit": "normal",  # "reduced": Vara's commands at low priority, fewer status checks and widget refreshes
     "gameMode": True,  # full-screen games get the performance mode; PolyOS pauses its background work
+    # Vara Voice (optional; Settings > Vara > Voice, offered when setting up the Developer edition)
+    "varaVoice": False,  # listen for "Hey Vera" and answer out loud (vara_voice.py)
+    "varaVoiceWake": True,  # False: only the push-to-talk shortcut (Win+Shift+V) starts listening
+    "varaVoiceSpeak": True,  # False: answers are shown, not spoken
 }
 POWER_MODES = ("saver", "balanced", "performance", "maximum")
 SCREEN_OFF_CHOICES = (0, 1, 2, 3, 5, 10, 15, 30, 60)
@@ -211,6 +215,9 @@ VALIDATORS = {
     "screenOff": _choice(*SCREEN_OFF_CHOICES),
     "sleepAfter": _choice(*SLEEP_CHOICES),
     "lockOnSleep": _bool,
+    "varaVoice": _bool,
+    "varaVoiceWake": _bool,
+    "varaVoiceSpeak": _bool,
     "lockNews": _bool,
     "cameraAccess": _bool,
     "micAccess": _bool,

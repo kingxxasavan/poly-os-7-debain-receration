@@ -821,7 +821,7 @@ const pages = {
     return { update: (_st, changed) => changed.has('settings') && update() };
   },
 
-  vara(page) {
+  vara(page, store) {
     const PRESETS = VARA_PROVIDERS;
     const err = h('div.error-text', { hidden: true });
     const note = h('span.muted.small');
@@ -904,6 +904,73 @@ const pages = {
         }, 'Forget everything')) : null);
     }
 
+    // ---- Vara Voice: "Hey Vera", spoken answers, push to talk (Developer edition, or once installed) ----
+    const voiceBody = h('div');
+    const voiceGroup = group('Voice', voiceBody);
+    const voiceNote = h('p.muted.small', { hidden: true });
+    let voice = null;
+    const STATES = { off: 'Off', idle: 'Listening for “Hey Vera”', listening: 'Listening…', thinking: 'Working on it…', speaking: 'Speaking…' };
+    function showVoice() {
+      const developer = store.state.settings.developerMode || store.state.settings.edition === 'developer';
+      voiceGroup.hidden = !voice || (!voice.installed && !developer);
+      if (!voice) return;
+      if (!voice.installed) {
+        const install = h('button.btn.primary', 'Install Vara Voice');
+        install.addEventListener('click', async () => {
+          install.disabled = true;
+          errorText(err, '');
+          try {
+            await withAdmin(() => api.post('/api/vara/voice/install', {}),
+              { title: 'Install Vara Voice', text: 'Enter your password to install Vara Voice (about 150 MB).' });
+          } catch (x) {
+            install.disabled = false;
+            if (!x.cancelled) errorText(err, x.message);
+          }
+        });
+        fill(voiceBody,
+          h('p.prose', 'Talk to Vara hands-free: say “Hey Vera” and ask. Vara answers out loud, and “stop” interrupts it. ',
+            'Speech is recognized on this computer; only your request goes to Vara, as if you typed it.'),
+          h('div.btn-row', install, voiceNote));
+        return;
+      }
+      const state = STATES[voice.running ? (voice.state || 'idle') : 'off'] || voice.state;
+      fill(voiceBody,
+        row('Vara Voice', voice.enabled ? state : 'Off', toggle(voice.enabled, (v) => save({ varaVoice: v }, err), 'Vara Voice')),
+        row('Wake words', 'Start talking with “Hey Vera”. Off: only Win+Shift+V starts listening',
+          toggle(voice.wake, (v) => save({ varaVoiceWake: v }, err), 'Wake words')),
+        row('Speak answers', 'Off: answers show in the Vara chat without being read out',
+          toggle(voice.speak, (v) => save({ varaVoiceSpeak: v }, err), 'Speak answers')),
+        row('Push to talk', 'Press Win+Shift+V anywhere, or the microphone in the Vara chat', h('button.btn', {
+          disabled: !voice.running, onclick: () => api.post('/api/vara/voice/listen', {}).catch((x) => errorText(err, x.message)),
+        }, icon('mic'), 'Try it')),
+        h('p.prose.small', 'Try: “Hey Vera, what’s the weather tomorrow?”, “Hey Vera, open YouTube and play lofi music”, ',
+          '“Hey Vera, remind me at 5 to call Sam”. Say “stop” or “Vera, stop” to interrupt, and “yes” or “no” when Vara asks first.'));
+    }
+    const loadVoice = () => api.get('/api/vara/voice').then((v) => { voice = v; showVoice(); }, () => {});
+    const offVoice = on('varaVoice', (e) => {
+      if (voice) { voice = { ...voice, state: e.state }; showVoice(); }
+    });
+    const { off: offVoiceJob } = watchJobs((job) => {
+      if (job.kind !== 'vara-voice') return;
+      voiceNote.hidden = false;
+      voiceNote.textContent = job.state === 'running' ? `${job.message || 'Installing…'}` : job.state === 'done'
+        ? 'Vara Voice is ready. Say “Hey Vera”.' : job.error || 'Vara Voice didn’t install.';
+      if (job.state !== 'running') loadVoice();
+    });
+
+    // ---- reminders and routines ----
+    const scheduleBody = h('div');
+    const scheduleGroup = group('Reminders & routines', scheduleBody);
+    function showScheduled(items) {
+      const when = (t) => new Date(t * 1000).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+      const repeat = { once: '', hourly: ' · every hour', daily: ' · every day', weekdays: ' · weekdays', weekly: ' · every week' };
+      fill(scheduleBody,
+        items.length ? items.map((it) => row(it.text, `${it.kind === 'routine' ? 'Routine' : 'Reminder'} · ${when(it.at)}${repeat[it.repeat] || ''}`,
+          h('button.btn', { onclick: () => api.post('/api/vara/scheduled/cancel', { id: it.id }).then((r) => showScheduled(r.scheduled), (x) => errorText(err, x.message)) }, 'Cancel')))
+          : h('p.prose', 'None yet. Ask Vara: “remind me at 5 to stretch”, or “every weekday at 8, summarize the news”. ',
+            'Routines run by themselves at their time; Vara shows the result and, with Vara Voice, says it.'));
+    }
+
     function loadAgent() {
       api.get('/api/vara/config').then((c) => { workspace.value = c.workspace; approval.set(c.approval); }, () => {});
       api.get('/api/vara/tools').then((t) => {
@@ -919,11 +986,12 @@ const pages = {
           h('p.prose.small', 'Skills are step-by-step know-how Vara reads before a task. Add your own as Markdown files in ',
             h('code', t.skillsFolder.replace(/^\/home\/[^/]+/, '~')), ', or ask Vara to save one after it works something out.'));
         showMemory(t.memory);
+        showScheduled(t.scheduled || []);
       }, (e) => errorText(err, e.message));
     }
 
     page.append(
-      pageHead('Vara', 'Your PolyOS agent for code, 3D models and robots, powered by the AI model you choose.'),
+      pageHead('Vara', 'Your PolyOS assistant: voice, the web, your apps, code, 3D models and robots, powered by the AI model you choose.'),
       err,
       group('Quick setup', row('Provider', 'Fills in the address and a model; then add your key from that service', presets)),
       group('Connection',
@@ -931,18 +999,26 @@ const pages = {
         row('Model', null, h('div.slider-wrap.wide', model)),
         row('API key', 'Stored only on this computer, readable only by you', h('div.slider-wrap.wide', key))),
       h('div.btn-row', saveBtn, testBtn, note),
+      voiceGroup,
       agentGroup,
+      scheduleGroup,
       toolsGroup,
       skillsGroup,
       memoryGroup,
       group('Privacy', h('p.prose',
         'Simple requests like “open Firefox” or “volume 40” are handled on this computer. Other messages, and what Vara ',
         'reads while working (files, command output), go to the endpoint above; with a cloud provider they leave this computer, ',
-        'so don’t share passwords with Vara. Vara never opens SSH keys, saved passwords, browser data or its own API key.')),
+        'so don’t share passwords with Vara. Vara never opens SSH keys, saved passwords, browser data or its own API key. ',
+        'Vara Voice recognizes speech on this computer and listens only for “Hey Vera” until you say it.')),
     );
+    voiceGroup.hidden = true;
     load();
     loadAgent();
-    return null;
+    loadVoice();
+    return {
+      close: () => { offVoice(); offVoiceJob(); },
+      update: (_s, changed) => { if (changed.has('settings')) loadVoice(); },
+    };
   },
 
   // Settings > Poly Account: optional. Connect (sign in, a code, or a new account), sync, remote management.

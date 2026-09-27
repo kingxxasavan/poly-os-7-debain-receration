@@ -77,6 +77,8 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("status", help="print the shell state as JSON")
     p = sub.add_parser("cloud", help="open a cloud gaming service (geforcenow, xcloud, luna, boosteroid)")
     p.add_argument("service")
+    p = sub.add_parser("vara", help="Vara Voice: listen now (push to talk)")
+    p.add_argument("action", choices=["listen"])
     p = sub.add_parser("dev", help="developer mode: on | off (off also rescues a broken interface)")
     p.add_argument("state", choices=["on", "off"])
     args = parser.parse_args(argv)
@@ -100,6 +102,11 @@ def main(argv: list[str] | None = None) -> int:
             call("POST", "/api/popup", {"view": "start", "toggle": True})
         elif args.command == "popup":
             call("POST", "/api/popup", {"view": args.view})
+        elif args.command == "vara":
+            try:
+                call("POST", "/api/vara/voice/listen", {})
+            except SystemExit:  # Vara Voice is off: open the Vara chat instead
+                call("POST", "/api/popup", {"view": "vara"})
         elif args.command == "open":
             page = args.page
             if page and page.startswith("file://"):  # .desktop %U hands us URIs

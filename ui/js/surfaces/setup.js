@@ -6,7 +6,7 @@
 
 import { withAdmin, watchJobs } from '../admin.js';
 import { api, launch, on, saveSettings, withToken } from '../api.js';
-import { packPanel, wifiPanel } from '../components.js';
+import { VARA_PROVIDERS, packPanel, providerFor, wifiPanel } from '../components.js';
 import { fill, formatBytes, h, hexToHue, hueToHex, icon, networkLabel, throttle } from '../ui.js';
 
 const GB = 1000 ** 3;
@@ -89,6 +89,8 @@ export function mount(root, store) {
     wipe: {}, roles: {}, // custom mode: drive -> what it's erased for; partition -> ROLES key
     user: { fullName: '', username: '', password: '' },
     appearance: { theme: store.state.settings.theme || 'dark', accent: store.state.settings.accent },
+    vara: false, // the Developer edition's question: Vara, the voice assistant, installed after PolyOS
+    varaConfig: null, // { provider, endpoint, model, apiKey } for Vara's AI, if given here
   };
   let probe = null;        // disks from /api/install/probe (fetched while the person fills in the rest)
   let probeError = null;
@@ -204,7 +206,12 @@ export function mount(root, store) {
     ];
   }
 
+  // The Developer edition asks one more thing: Vara, the voice and agent assistant ("vara" view),
+  // then its AI provider ("varaKey"). Everyone else goes straight on.
+  let editionView = 'pick';
   function edition() {
+    if (plan.edition === 'developer' && editionView === 'vara') return varaOffer();
+    if (plan.edition === 'developer' && editionView === 'varaKey') return varaKey();
     const cards = EDITIONS.map(([id, name, text, ico]) => h('button.su-edition', {
       class: plan.edition === id ? 'on' : '', role: 'radio', 'aria-checked': String(plan.edition === id),
       onclick: () => { plan.edition = id; go(step); },
@@ -214,7 +221,61 @@ export function mount(root, store) {
       h('div.su-editions', { role: 'radiogroup', 'aria-label': 'Edition' }, cards),
       plan.edition === 'regular' ? null : h('p.su-note', icon('info'),
         'Its apps download by themselves after installing, once you’re online.'),
-      nav(next()),
+      nav(next('Next', () => {
+        if (plan.edition === 'developer') { editionView = 'vara'; go(step); } else { plan.vara = false; go(step + 1); }
+      })),
+    ];
+  }
+
+  // inside this step, Back goes to the step's previous screen
+  const subNav = (prev, ...right) => h('div.su-nav', h('button.su-back', { onclick: prev, title: 'Back' }, icon('chevronLeft'), 'Back'),
+    h('div.su-nav-right', ...right));
+
+  function varaOffer() {
+    const choose = (yes) => { plan.vara = yes; editionView = yes ? 'varaKey' : 'pick'; if (yes) go(step); else go(step + 1); };
+    return [
+      h('div.su-vara-head', h('img', { src: '/img/vara.png', alt: '' }),
+        h('div', ...head('Would you like Vara?', 'Our assistant, for the Developer edition: voice and agent, working for you around the clock.'))),
+      h('ul.su-bullets',
+        h('li', h('b', 'Talk to it: '), '“Hey Vera”, then ask. Vara answers out loud, and “stop” interrupts it.'),
+        h('li', h('b', 'It does things: '), 'drives your browser, opens apps, plays music, changes settings, searches the web and reads pages.'),
+        h('li', h('b', 'It remembers: '), 'what matters to you, plus reminders and routines that run on their own.'),
+        h('li', h('b', 'It builds: '), 'code, 3D models and robot projects with you, and asks before changing anything.')),
+      h('div.su-options',
+        option('Yes, set up Vara', 'Installs after PolyOS (about 150 MB). Speech is recognized on this computer; it only listens for “Hey Vera”.',
+          h('span.su-dual', icon('mic')), () => choose(true)),
+        option('Not now', 'Vara stays a chat in the dock. Settings › Vara adds the voice any time.',
+          h('span.su-dual', icon('chat')), () => choose(false))),
+      subNav(() => { editionView = 'pick'; go(step); }),
+    ];
+  }
+
+  let varaProvider = VARA_PROVIDERS[0];
+  function varaKey() {
+    const key = h('input.su-input', { type: 'password', placeholder: 'Paste your API key', autocomplete: 'off', 'aria-label': 'API key',
+      value: plan.varaConfig?.apiKey || '' });
+    const label = h('span');
+    const hint = h('small');
+    const chips = h('div.su-chips', VARA_PROVIDERS.map((p) => h('button.su-chip', { onclick: () => pick(p) }, p.label)));
+    function pick(p) {
+      varaProvider = p;
+      label.textContent = `${p.label} API key`;
+      hint.textContent = `${p.keyHint} Other providers are in Settings › Vara.`;
+      chips.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.textContent === p.label));
+    }
+    pick(varaProvider);
+    const done = (withKey) => {
+      plan.varaConfig = withKey && key.value.trim() ? { provider: providerFor(varaProvider.endpoint), endpoint: varaProvider.endpoint,
+        model: varaProvider.model, apiKey: key.value.trim() } : null;
+      editionView = 'pick';
+      go(step + 1);
+    };
+    return [
+      ...head('Connect Vara’s brain', 'Vara thinks with the AI model you choose, using your own key. Simple things like “open Firefox” or “volume 40” work without one.'),
+      chips,
+      h('label.su-field.wide', label, key, hint),
+      subNav(() => { editionView = 'vara'; go(step); }, h('button.su-link', { onclick: () => done(false) }, 'Add it later'),
+        next('Next', () => done(true), { primary: true })),
     ];
   }
 
@@ -688,6 +749,7 @@ export function mount(root, store) {
   async function startInstall() {
     const payload = { mode: plan.mode, disk: plan.disk, hostname: plan.hostname, timezone: plan.timezone,
       user: plan.user, appearance: plan.appearance, edition: plan.edition,
+      vara: plan.edition === 'developer' && plan.vara, varaConfig: plan.edition === 'developer' && plan.vara ? plan.varaConfig : null,
       profile: profile || hardware?.profile || null, background: hardware?.background || null, drivers: recommended || [],
       ...(plan.mode === 'alongside' ? { size: plan.size } : {}),
       ...(plan.mode === 'custom' ? customLayout() : {}),

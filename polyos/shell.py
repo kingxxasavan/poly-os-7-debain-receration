@@ -151,6 +151,10 @@ class DesktopShell(Backend):
         self._refresh_system(("volume", "network", "battery", "brightness"))
         threading.Thread(target=self._poll_loop, name="polyos-poll", daemon=True).start()
         self._watch_logind()
+        # Vara around the clock: reminders and routines, and Vara Voice when it's turned on
+        self.vara.start_scheduler(self)
+        self.sync_vara_voice()
+        GLib.timeout_add_seconds(30, lambda: (self.sync_vara_voice(), True)[1])
         if self._lock_flag.exists():
             self.lock()
         threading.Thread(target=self._apply_power, args=(self.settings.snapshot(), True), daemon=True).start()
@@ -161,6 +165,7 @@ class DesktopShell(Backend):
     def quit(self, code: int = EXIT_LOGOUT):
         self.exit_code = code
         self._poll_stop.set()
+        self.stop_vara_voice()
         Gtk.main_quit()
         return False
 
