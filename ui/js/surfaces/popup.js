@@ -1,4 +1,4 @@
-// Popup surface: hosts whichever view the backend opened (Home Menu, launcher, quick settings, ...).
+// Popup surface: hosts whichever view the backend opened (Start, launcher, quick settings, ...).
 
 import { api, closePopup, on } from '../api.js';
 import { h } from '../ui.js';
@@ -6,15 +6,17 @@ import calendar from '../views/calendar.js';
 import home from '../views/home.js';
 import launcher from '../views/launcher.js';
 import power from '../views/power.js';
+import project from '../views/project.js';
 import quick from '../views/quick.js';
 import quickmenu from '../views/quickmenu.js';
 import run from '../views/run.js';
 import taskmenu from '../views/taskmenu.js';
+import tray from '../views/tray.js';
 import vara from '../views/vara.js';
 import widgets from '../views/widgets.js';
 
-// "start" is the Home Menu (the name keybindings and polyos-ctl use).
-const views = { start: home, launcher, power, run, quick, calendar, taskmenu, vara, quickmenu, widgets };
+// "start" is the Start menu (the name keybindings and polyos-ctl use).
+const views = { start: home, launcher, power, run, quick, calendar, taskmenu, vara, quickmenu, widgets, tray, project };
 
 export function mount(root, store) {
   root.className = 'popup-root';

@@ -105,6 +105,30 @@ def _cpu_model() -> str:
     return ""
 
 
+def user_processes(uid: int | None = None) -> list[tuple[int, set[str]]]:
+    """(pid, names) for the person's processes, oldest first: the kernel's name and the program's file name."""
+    uid = os.getuid() if uid is None and hasattr(os, "getuid") else uid
+    out = []
+    try:
+        entries = list(os.scandir("/proc"))
+    except OSError:
+        return out
+    for entry in entries:
+        if not entry.name.isdigit():
+            continue
+        try:
+            if entry.stat().st_uid != uid:
+                continue
+        except OSError:
+            continue
+        stat = parse_stat(_read(f"/proc/{entry.name}/stat"))
+        argv0 = _read(f"/proc/{entry.name}/cmdline").split("\0", 1)[0]
+        if stat is None or stat["state"] == "Z":
+            continue
+        out.append((int(entry.name), {stat["name"], Path(argv0).name} - {""}))
+    return sorted(out)
+
+
 class ProcessMonitor:
     def __init__(self, protected: set[int] | None = None):
         self.uid = os.getuid() if hasattr(os, "getuid") else 0

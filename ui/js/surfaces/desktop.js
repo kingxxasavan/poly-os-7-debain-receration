@@ -1,15 +1,33 @@
 // Desktop: wallpaper, app shortcuts, optional clock widget, installer card on live media,
 // right-click menu.
 
-import { api, launch, openSettings, saveSettings, withToken } from '../api.js';
+import { api, launch, on, openSettings, saveSettings, withToken } from '../api.js';
 import { clockTicker, fmtDate, fmtTime, greeting, h, icon } from '../ui.js';
 
 export function mount(root, store) {
   root.className = 'desktop';
   const wall = h('div.wallpaper');
+  const walls = h('div.walls'); // with more than one screen: a wallpaper on each
   const clock = h('div.desk-clock');
   const icons = h('div.desk-icons', { role: 'list', 'aria-label': 'Desktop shortcuts' });
-  root.append(wall, icons, clock);
+  const area = h('div.desk-area', icons, clock); // the main screen: shortcuts and the clock live here
+  root.append(wall, walls, area);
+
+  // ---- screens: the desktop spans them all; each gets the wallpaper, the main one the shortcuts ----
+  let monitors = [];
+  function renderScreens() {
+    const many = monitors.length > 1;
+    wall.hidden = many;
+    walls.replaceChildren(...(many ? monitors.map((m) => h('div.wallpaper.ready', { style: {
+      left: `${m.x}px`, top: `${m.y}px`, width: `${m.width}px`, height: `${m.height}px`, inset: 'auto',
+      backgroundImage: wall.style.backgroundImage } })) : []));
+    const main = monitors.find((m) => m.primary) || monitors[0];
+    Object.assign(area.style, many && main
+      ? { left: `${main.x}px`, top: `${main.y}px`, width: `${main.width}px`, height: `${main.height}px`, right: 'auto', bottom: 'auto' }
+      : { left: '', top: '', width: '', height: '', right: '', bottom: '' });
+  }
+  api.get('/api/monitors').then((r) => { monitors = r.monitors || []; renderScreens(); }, () => {});
+  on('monitors', (e) => { monitors = e.monitors || []; renderScreens(); });
 
   // ---- shortcuts on the desktop (like Windows): double-click to open, right-click for more ----
   let selected = null;
@@ -61,6 +79,7 @@ export function mount(root, store) {
     img.onload = () => {
       wall.style.backgroundImage = `url("${url}")`;
       wall.classList.add('ready');
+      renderScreens();
       hideSplash();
     };
     img.onerror = () => {
@@ -131,7 +150,7 @@ export function mount(root, store) {
     ['plus', 'Add apps to the desktop', () => api.post('/api/popup', { view: 'launcher', data: { target: 'desktop' } })],
     ['taskbar', 'Taskbar settings', () => openSettings('taskbar')],
     null,
-    ['palette', 'Personalize', () => openSettings('appearance')],
+    ['palette', 'Personalization', () => openSettings('appearance')],
     ['monitor', 'Display settings', () => openSettings('display')],
     null,
     ['activity', 'Task Manager', () => open('taskmgr')],

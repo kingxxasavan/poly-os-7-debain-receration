@@ -141,3 +141,39 @@ def has_camera(sys_root: Path = Path("/sys/class/video4linux")) -> bool:
         if index == 0 and not any(word in name for word in ("codec", "decoder", "encoder", "isp", "m2m")):
             return True
     return False
+
+
+# ---- the lid and the power button (Settings > Power & Performance), done by logind -------------
+LOGIND_CONF = Path("/etc/systemd/logind.conf.d/50-polyos.conf")
+KEY_ACTIONS = {"suspend": "Sleep", "poweroff": "Shut down", "lock": "Lock", "ignore": "Do nothing"}
+KEY_DEFAULTS = {"lid": "suspend", "lidPlugged": "suspend", "button": "poweroff"}
+
+
+def logind_text(lid: str, lid_plugged: str, button: str) -> str:
+    for value in (lid, lid_plugged, button):
+        if value not in KEY_ACTIONS:
+            raise ValueError("Choose Sleep, Shut down, Lock or Do nothing.")
+    return ("# Written by PolyOS (Settings > Power & Performance)\n[Login]\n"
+            f"HandleLidSwitch={lid}\nHandleLidSwitchExternalPower={lid_plugged}\nHandleLidSwitchDocked=ignore\n"
+            f"HandlePowerKey={button}\n")
+
+
+def power_keys(path: Path = LOGIND_CONF) -> dict:
+    """What closing the lid (on battery, plugged in) and pressing the power button do now."""
+    out = dict(KEY_DEFAULTS)
+    names = {"HandleLidSwitch": "lid", "HandleLidSwitchExternalPower": "lidPlugged", "HandlePowerKey": "button"}
+    try:
+        text = path.read_text("utf-8")
+    except OSError:
+        return out
+    for line in text.splitlines():
+        key, _, value = line.partition("=")
+        if key.strip() in names and value.strip() in KEY_ACTIONS:
+            out[names[key.strip()]] = value.strip()
+    return out
+
+
+def has_lid() -> bool:
+    return any(Path("/proc/acpi/button/lid").glob("*/state")) or Path("/sys/class/input").exists() and any(
+        "Lid Switch" in (p / "name").read_text(errors="ignore") for p in Path("/sys/class/input").glob("input*")
+        if (p / "name").exists())

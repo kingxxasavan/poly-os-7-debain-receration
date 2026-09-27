@@ -12,7 +12,8 @@ import time
 from pathlib import Path
 
 from . import __version__, installer, paths, startup, store
-from .backend import DISPLAY_NAMES, DOCK_HEIGHT, DOCK_MARGIN, HIDDEN_APPS, PANEL_HEIGHT, Backend
+from .files import kind_of
+from .backend import DISPLAY_NAMES, DOCK_HEIGHT, DOCK_MARGIN, PANEL_HEIGHT, Backend, app_hidden
 from .core import ApiError, EventBus, Settings, bundled_icon, icon_names, letter_icon
 from .files import P
 from .privileged import NeedPassword
@@ -23,7 +24,7 @@ OWN_APPS = {"polyos-settings.desktop": "settings", "polyos-files.desktop": "file
             "polyos-install.desktop": "setup"}
 
 _APPS = [
-    ("firefox-esr.desktop", "Firefox ESR", "Browse the World Wide Web", "Network;WebBrowser"),
+    ("google-chrome.desktop", "Google Chrome", "Access the Internet", "Network;WebBrowser"),
     ("polyos-files.desktop", "Files", "Browse and organize your files", "System;FileManager"),
     ("thunar.desktop", "Thunar File Manager", "Browse the filesystem", "System;FileManager"),
     ("xfce4-terminal.desktop", "Terminal", "Use the command line", "System;TerminalEmulator"),
@@ -49,10 +50,16 @@ _APPS = [
 ]
 
 # the Icon= names these apps' .desktop files use, so the preview shows the same icons as a real system
-_ICONS = {"firefox-esr.desktop": "firefox-esr", "thunar.desktop": "org.xfce.thunar",
+_ICONS = {"google-chrome.desktop": "google-chrome", "thunar.desktop": "org.xfce.thunar",
           "xfce4-terminal.desktop": "org.xfce.terminal", "pavucontrol.desktop": "multimedia-volume-control",
           "nm-connection-editor.desktop": "preferences-system-network", "code.desktop": "com.visualstudio.code",
           "arandr.desktop": "preferences-desktop-display", "xfce4-screenshooter.desktop": "org.xfce.screenshooter"}
+
+# what a real PolyOS image ships of the apps above (the rest stand for apps installed later)
+MOCK_BASE = {"google-chrome.desktop", "xfce4-terminal.desktop", "org.xfce.mousepad.desktop", "pavucontrol.desktop",
+             "nm-connection-editor.desktop", "htop.desktop", "org.gnome.Calculator.desktop", "arandr.desktop",
+             "xfce4-screenshooter.desktop", "org.xfce.ristretto.desktop", "thunar.desktop"}
+
 
 class MockBackend(Backend):
     dev = True
@@ -69,14 +76,14 @@ class MockBackend(Backend):
             apps.append(("install-debian.desktop", "PolyOS Advanced Installer", "Install PolyOS with manual partitioning", "System"))
         self._apps = sorted(
             ({"id": i, "name": DISPLAY_NAMES.get(i, n), "description": d, "categories": c.split(";"), "keywords": [],
-              "icon": f"/icon/app/{i}", "hidden": i in HIDDEN_APPS} for i, n, d, c in apps),
+              "icon": f"/icon/app/{i}", "hidden": app_hidden(i, MOCK_BASE)} for i, n, d, c in apps),
             key=lambda a: a["name"].casefold())
         self._admin_ready = live  # the live USB's account needs no password; "polyos" unlocks the mock
         if live:
             self.show_install_app()
         if os.environ.get("POLYOS_SERVER") and not live:  # a local website (npm run dev): real Poly Account check-ins
             self.start_account_loop(first_delay=2, every=15)
-        self._store_installed = {"firefox"}
+        self._store_installed = {"chrome"}
         self._driver_state: set[str] = {"firmware-iwlwifi", "firmware-sof-signed"}
         self._procs_seed = random.Random(7)
         self._windows: list[dict] = []
@@ -195,10 +202,73 @@ class MockBackend(Backend):
     def greeter_power(self, action):
         self.bus.publish("power", action={"shutdown": "poweroff", "restart": "reboot"}.get(action, action))
 
+    def windows_installed(self):
+        return True  # the preview shows the dual-boot Power menu
+
+    def restart_to_windows(self):
+        self.bus.publish("power", action="reboot")
+        return {"ok": True}
+
+    # ---- Settings: lid and power button, usage, storage clean-up (simulated) ----------------------
+    def power_keys(self):
+        from . import power
+        return {**getattr(self, "_keys", power.KEY_DEFAULTS), "hasLid": True, "actions": power.KEY_ACTIONS}
+
+    def power_keys_set(self, lid, plugged, button):
+        from . import power
+        power.logind_text(lid, plugged, button)
+        if not self._admin_ready:
+            raise NeedPassword()
+        self._keys = {"lid": lid, "lidPlugged": plugged, "button": button}
+        return self.jobs.start("power-keys", "Saving power button and lid settings", [], target="power-keys",
+                               runner=self._simulate(["Saving…"], 1))
+
+    def usage(self):
+        if not self._usage_path().exists() and self.settings.get("keepRecent"):
+            for app_id, mins in (("google-chrome.desktop", 142), ("xfce4-terminal.desktop", 38), ("org.xfce.mousepad.desktop", 21),
+                                 ("steam.desktop", 64)):
+                self.usage_tick(app_id, mins * 60)
+        return super().usage()
+
+    def storage_clean(self, what):
+        if what == "packages":
+            if not self._admin_ready:
+                raise NeedPassword()
+            return self.jobs.start("clean", "Deleting downloaded packages", [], target="packages",
+                                   runner=self._simulate(["Deleting downloaded packages…"], 1))
+        return super().storage_clean(what)
+
+    # ---- the Start menu's Recommended, and an app in the background (the taskbar's ^) ----------
+    def recent_files(self):
+        if not hasattr(self, "_recent"):
+            home = self.files.home
+            now = int(time.time())
+            self._recent = [{"name": Path(rel).name, "path": str(home / rel), "time": now - age,
+                             "kind": kind_of(home / rel, False)[1]}
+                            for rel, age in (("Documents/Budget.xlsx", 1800), ("Documents/School/History essay.docx", 7200),
+                                             ("Documents/Launch deck.pptx", 86400), ("Documents/Welcome to PolyOS.txt", 3 * 86400))
+                            if (home / rel).exists()]
+        return self._recent[:8]
+
+    def background_apps(self):
+        if getattr(self, "_steam_quit", False) or any(w["appId"] == "steam.desktop" for w in self.windows()):
+            return []
+        app = self._app("steam.desktop")
+        return [{"appId": app["id"], "name": app["name"], "icon": app["icon"], "pid": 4242}]
+
+    def end_background_app(self, app_id):
+        if app_id != "steam.desktop" or not self.background_apps():
+            raise ApiError("That app isn't running.", 404)
+        self._steam_quit = True
+        return {"ok": True}
+
     def open_path(self, path):
         p = self.files.resolve(path)
         if p.is_dir():
             return self.open_app("files", str(p))
+        if self.settings.get("keepRecent"):
+            recent = [f for f in self.recent_files() if f["path"] != str(p)]
+            self._recent = [{"name": p.name, "path": str(p), "time": int(time.time()), "kind": kind_of(p, False)[1]}, *recent]
         kind = self.files.entry(p)["kind"]
         app = {"image": "org.xfce.ristretto.desktop", "video": "vlc.desktop", "audio": "vlc.desktop"}.get(kind, "org.xfce.mousepad.desktop")
         self._add_window(app, p.name)
@@ -415,6 +485,18 @@ DP-1 disconnected (normal left inverted right x axis y axis)
                     n["active"] = False
         self._publish_system()
 
+    def apply_airplane(self, on):
+        self.wifi_enable(not on)
+
+    def apply_night_light(self):
+        pass  # the simulator has no screens to tint
+
+    def update_settings(self, patch):
+        settings = super().update_settings(patch)
+        if isinstance(patch, dict) and "airplaneMode" in patch:
+            self.apply_airplane(settings["airplaneMode"])
+        return settings
+
     def power(self, action):
         self.popup_closed()
         if action == "lock":
@@ -426,9 +508,29 @@ DP-1 disconnected (normal left inverted right x axis y axis)
         self.popup_closed()
         self.bus.publish("lock", locked=True)
 
+    # PIN (simulated: kept in memory; the password is "polyos")
+    def pin_status(self):
+        return {"set": bool(getattr(self, "_pin", None)), "blocked": False, "available": True}
+
+    def pin_set(self, password, new_pin):
+        from . import pin
+        if new_pin is not None and not pin.valid(new_pin):
+            raise ApiError("A PIN is 4 to 6 digits.")
+        if password != "polyos":
+            raise ApiError("That password isn't right. Try again.", 403)
+        self._pin = new_pin
+        return self.pin_status()
+
+    def pin_unlock(self, secret):
+        return bool(getattr(self, "_pin", None)) and secret == self._pin
+
     def lock_unlock(self, password):
         self.unlock_throttle.check()
         time.sleep(0.5)
+        if self.pin_unlock(password):
+            self.unlock_throttle.succeeded()
+            self.bus.publish("lock", locked=False)
+            return {"ok": True}
         if password != "polyos":
             self.unlock_throttle.failed()
             raise ApiError("That password isn't right. Try again.", 403)
@@ -671,14 +773,37 @@ DP-1 disconnected (normal left inverted right x axis y axis)
             {"slot": "00:1f.3", "className": "Audio device", "classId": "0403", "vendor": "Intel Corporation",
              "vendorId": "8086", "device": "Sunrise Point-LP HD Audio", "deviceId": "9d71", "driver": "snd_hda_intel"},
         ]
-        items = recommend(devices, "nvidia-driver", ["firmware-misc-nonfree"])
+        from .drivers import core_devices
+        items = core_devices("model name\t: Intel(R) Core(TM) i7-8550U CPU @ 1.80GHz\nvendor_id\t: GenuineIntel\n",
+                             "MemTotal:       16318412 kB\n", [{"name": "nvme0n1", "model": "Samsung SSD 970 EVO 512GB (NVMe drive)", "driver": "nvme"}],
+                             ["Built-in screen"], "amd64")
+        items += recommend(devices, "nvidia-driver", ["firmware-misc-nonfree"])
         # a 2-in-1 with a touchscreen, a pen and a webcam
         items += extra_devices([{"name": "ELAN9008:00 04F3:2C82", "pen": False}, {"name": "ELAN9008:00 04F3:2C82 Stylus", "pen": True}],
                                True, devices, ["accel"])
         for it in items:
             it["missing"] = [p for p in it["packages"] if p not in self._driver_state]
         self._driver_packages = {p for d in items for p in d["packages"]}
-        return {"devices": items, "secureBoot": True}
+        return {"devices": items, "secureBoot": True, "computer": {"maker": "Dell", "model": "XPS 13 9370", "bios": "1.21.0",
+                                                                   "biosDate": "03/14/2023", "laptop": True, "virtual": False}}
+
+    def firmware_status(self):
+        time.sleep(0.8)
+        if getattr(self, "_fw_done", False):
+            return {"available": True, "updates": []}
+        return {"available": True, "updates": [
+            {"device": "System Firmware", "vendor": "Dell Inc.", "current": "1.21.0", "version": "1.23.1",
+             "summary": "Firmware for the Dell XPS 13 9370", "size": 21_000_000, "urgency": "high", "id": "bios"}]}
+
+    def firmware_install(self):
+        if not self._admin_ready:
+            raise NeedPassword()
+
+        def finish():
+            self._fw_done = True
+        return self.jobs.start("drivers", "Updating firmware", [], target="firmware",
+                               runner=self._simulate(["Getting the newest firmware list from your computer's maker…",
+                                                      "Installing firmware updates… Keep the computer plugged in."], 4, finish, restart=True))
 
     def drivers_install(self, packages):
         bad = [p for p in packages if p not in self._driver_packages]
@@ -788,7 +913,7 @@ DP-1 disconnected (normal left inverted right x axis y axis)
         verb = "Installing" if action == "install" else "Removing"
         return self.jobs.start("store", f"{verb} {app['name']}", [], target=app_id,
                                runner=self._simulate(steps, 5 if action == "install" else 2, finish),
-                               on_done=lambda j: self.bus.publish("store"))
+                               on_done=lambda j: self.bus.publish("store"), queue=True)
 
     def _add_store_app(self, app):
         desktop = (app.get("desktop") or [None])[0]
@@ -826,35 +951,6 @@ DP-1 disconnected (normal left inverted right x axis y axis)
                  *[f"Installing {apps[i]['name']} ({n + 1} of {len(ids)})…" for n, i in enumerate(ids)]]
         return self.jobs.start("pack", f"Setting up {info['name']}", [], target=name,
                                runner=self._simulate(steps, 6, finish), on_done=lambda j: self.bus.publish("store"))
-
-    # ---- Vara Voice (simulated: no microphone or process) ------------------------------------------
-    def _voice_installed(self):
-        return getattr(self, "_voice_ok", False)
-
-    def vara_voice_install(self):
-        if not self.vara_extras():
-            return super().vara_voice_install()  # refused: the Developer edition's
-        if not self._admin_ready:
-            raise NeedPassword()
-
-        def finish():
-            self._voice_ok = True
-            self.update_settings({"varaVoice": True})
-        steps = ["Installing espeak-ng, xdotool and playerctl…", "Setting up Vara's speech engine…",
-                 "Downloading the speech recognition model…", "Downloading Vara's voice…"]
-        return self.jobs.start("vara-voice", "Installing Vara Voice", [], target="vara-voice", runner=self._simulate(steps, 5, finish))
-
-    def vara_voice_status(self):
-        st = super().vara_voice_status()
-        return {**st, "running": st["installed"] and st["enabled"]}
-
-    def sync_vara_voice(self):
-        on = self._voice_installed() and self.settings.get("varaVoice") and self.vara_extras()
-        self._voice_state = {"state": "idle" if on else "off", "text": ""}
-        self.bus.publish("varaVoice", **self._voice_state)
-
-    def stop_vara_voice(self):
-        pass
 
     # ---- Settings > Apps (simulated origins; startup entries in a sample folder) ------------------
     def _startup_dirs(self):
@@ -945,7 +1041,7 @@ DP-1 disconnected (normal left inverted right x axis y axis)
         apps = []
         for w in self.windows():
             app = next((a for a in self._apps if a["id"] == w["appId"]), None)
-            base = 420 if "firefox" in (w["appId"] or "") else 80
+            base = 420 if "chrome" in (w["appId"] or "") else 80
             apps.append({"pid": 4000 + w["xid"] % 997, "name": app["name"] if app else w["title"], "title": w["title"],
                          "icon": w["icon"], "cpu": round(rnd.uniform(0, 9 if base > 100 else 3), 1),
                          "memory": int((base + rnd.uniform(-10, 40)) * 1024 ** 2), "count": 6 if base > 100 else 1,

@@ -10,13 +10,13 @@ export function mount(root, store) {
   const { user } = store.state;
   mountAuth(root, store, {
     kind: 'lock',
-    load: () => ({
-      users: [{ name: user.name, displayName: user.fullName || user.name }],
+    load: () => api.get('/api/account/pin').catch(() => ({ set: false })).then((pin) => ({
+      users: [{ name: user.name, displayName: user.fullName || user.name, pin: !!(pin.set && !pin.blocked) }],
       selectedUser: user.name,
       sessions: [],
       hostname: store.state.hostname,
       can: { suspend: true, restart: true, shutdown: true },
-    }),
+    })),
     signIn: (_user, password) => api.post('/api/lock/unlock', { password }),
     recover: (_user, key, password) => api.post('/api/lock/recover', { key, password }),
     power: (action) => api.post('/api/power', { action: POWER[action] }),

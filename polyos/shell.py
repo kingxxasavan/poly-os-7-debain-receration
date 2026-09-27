@@ -36,8 +36,9 @@ except ValueError:
     gi.require_version("WebKit2", "4.0")
 from gi.repository import Gdk, GdkPixbuf, GdkX11, Gio, GLib, Gtk, WebKit2, Wnck  # noqa: E402
 
-from . import __version__, gaming, paths, power, system, theme  # noqa: E402
-from .backend import (CAMERA_APP, DISPLAY_NAMES, INSTALL_APP, DOCK_HEIGHT, DOCK_MARGIN, HIDDEN_APPS, PANEL_HEIGHT,  # noqa: E402
+from . import __version__, display, gaming, paths, power, system, theme  # noqa: E402
+from .backend import (CAMERA_APP, DISPLAY_NAMES, INSTALL_APP, DOCK_HEIGHT, DOCK_MARGIN, PANEL_HEIGHT, app_hidden, base_apps,
+                      supersede_browsers,  # noqa: E402
                       Backend, dock_geometry, panel_margin)
 from .core import IMAGE_TYPES, ApiError, EventBus, Settings, bundled_icon, icon_names, letter_icon  # noqa: E402
 from .mainloop import on_main  # noqa: E402
@@ -120,7 +121,9 @@ class DesktopShell(Backend):
             WebKit2.UserScriptInjectionTime.START, None, None))
 
         try:
-            self.apply_saved_displays()  # the resolution and refresh rate chosen in Settings > Display
+            # every connected screen on and arranged (Settings > Display, Win+P), with the modes chosen there
+            self.apply_display_layout()
+            self._connectors = display.connectors()
         except Exception:  # noqa: BLE001 - a screen setting must never stop the desktop starting
             log.exception("couldn't apply the saved display settings")
         self._load_apps()
@@ -151,10 +154,10 @@ class DesktopShell(Backend):
         self._refresh_system(("volume", "network", "battery", "brightness"))
         threading.Thread(target=self._poll_loop, name="polyos-poll", daemon=True).start()
         self._watch_logind()
-        # Vara around the clock: reminders and routines, and Vara Voice when it's turned on
-        self.vara.start_scheduler(self)
-        self.sync_vara_voice()
-        GLib.timeout_add_seconds(30, lambda: (self.sync_vara_voice(), True)[1])
+        try:
+            self._watch_gnome_background()
+        except GLib.Error as exc:
+            log.info("no GNOME background setting to follow: %s", exc.message)
         if self._lock_flag.exists():
             self.lock()
         threading.Thread(target=self._apply_power, args=(self.settings.snapshot(), True), daemon=True).start()
@@ -165,7 +168,6 @@ class DesktopShell(Backend):
     def quit(self, code: int = EXIT_LOGOUT):
         self.exit_code = code
         self._poll_stop.set()
-        self.stop_vara_voice()
         Gtk.main_quit()
         return False
 
@@ -210,52 +212,36 @@ class DesktopShell(Backend):
         win.add(win.view)
         return win
 
-    # ---- the HUD: the assistant's full-screen interface (surface=hud) ----
-    def _show_hud(self, show: bool) -> None:
-        GLib.idle_add(self._show_hud_main, show)
-
-    def _show_hud_main(self, show: bool):
-        win = getattr(self, "hud_window", None)
-        if not show:
-            if win is not None:
-                win.destroy()
-                self.hud_window = None
-            return False
-        if win is None:  # like the other surfaces, except that closing it (Alt+F4) closes the HUD
-            win = Gtk.Window(title="PolyOS HUD")
-            win.set_wmclass("polyos-hud", "PolyOS")
-            win.set_decorated(False)
-            win.set_skip_taskbar_hint(True)
-            visual = self.gdk_screen.get_rgba_visual()
-            if self.composited and visual is not None:
-                win.set_visual(visual)
-                win.set_app_paintable(True)
-            win.connect("delete-event", lambda *_: (self.hud(False), True)[1])
-            win.view = self._view("surface=hud", self.composited and visual is not None)
-            win.add(win.view)
-            win.set_keep_above(True)
-            self.hud_window = win
-        geo = self._geometry()
-        win.move(geo.x, geo.y)
-        win.resize(geo.width, geo.height)
-        win.show_all()
-        win.fullscreen()
-        win.present_with_time(self._x_time())
-        win.view.grab_focus()
-        return False
-
     def _geometry(self) -> Gdk.Rectangle:
         display = Gdk.Display.get_default()
         monitor = display.get_primary_monitor() or display.get_monitor(0)
         return monitor.get_geometry()
 
     def _layout(self) -> None:
-        # The desktop covers the whole X screen (every monitor), so no edge is left bare.
+        # The desktop covers the whole X screen (every monitor), so no edge is left bare; it draws a
+        # wallpaper on each screen and keeps the shortcuts on the main one (monitors()).
         width, height = self.gdk_screen.get_width(), self.gdk_screen.get_height()
         self.desktop.set_size_request(width, height)
         self.desktop.resize(width, height)
         self.desktop.move(0, 0)
         self._place_panel()
+        mons = self._read_monitors()
+        if mons != getattr(self, "_last_monitors", None):
+            self._last_monitors = mons
+            self.bus.publish("monitors", monitors=mons)
+
+    def monitors(self) -> list[dict]:
+        return getattr(self, "_last_monitors", [])
+
+    def _read_monitors(self) -> list[dict]:  # main thread
+        display_ = Gdk.Display.get_default()
+        primary = display_.get_primary_monitor() or display_.get_monitor(0)
+        out = []
+        for i in range(display_.get_n_monitors()):
+            mon = display_.get_monitor(i)
+            g = mon.get_geometry()
+            out.append({"x": g.x, "y": g.y, "width": g.width, "height": g.height, "primary": mon == primary})
+        return out
 
     def _relayout_soon(self) -> None:
         self._layout()
@@ -441,10 +427,13 @@ class DesktopShell(Backend):
             width = min(popup["width"], g.width - 24)
             x, y, height = 12, 12, g.height - PANEL_HEIGHT - 16
         else:
-            width, height = popup["width"], popup["height"]
+            width, height = min(popup["width"], g.width - 24), min(popup["height"], g.height - PANEL_HEIGHT - 16)
             anchor = popup.get("anchorX")
             dock_x = self._dock_rect()[0] - g.x
-            x = 12 if anchor is None else int(dock_x + anchor - width / 2)  # anchor is dock-relative
+            if anchor is None and popup.get("view") == "start" and self.settings.get("taskbarAlign") != "left":
+                x = (g.width - width) // 2  # the Start menu opens over the middle of a centered taskbar
+            else:
+                x = 12 if anchor is None else int(dock_x + anchor - width / 2)  # anchor is dock-relative
             x = max(12, min(x, g.width - width - 12))
             y = g.height - PANEL_HEIGHT - height - 4
         self.popup.set_size_request(width, height)
@@ -478,6 +467,7 @@ class DesktopShell(Backend):
     def _load_apps(self) -> None:
         theme = Gtk.IconTheme.get_default()
         infos, apps, icons, themed_names = {}, [], {}, {}
+        base = base_apps()  # what the PolyOS image shipped (only some of it is listed)
         cloud_on = set(gaming.enabled(self.settings, self.files.home))
         for info in Gio.AppInfo.get_all():
             if not isinstance(info, Gio.DesktopAppInfo) or not info.should_show():
@@ -485,8 +475,6 @@ class DesktopShell(Backend):
             app_id = info.get_id()
             if not app_id or app_id in infos:
                 continue
-            if app_id == CAMERA_APP and not self._camera:
-                continue  # the Camera app only appears on computers with a webcam
             if app_id == INSTALL_APP and not self._live:
                 continue  # "Install PolyOS 7" is for the USB only
             cid = gaming.cloud_id(app_id)
@@ -496,7 +484,7 @@ class DesktopShell(Backend):
             apps.append({
                 "id": app_id,
                 "name": DISPLAY_NAMES.get(app_id) or info.get_display_name() or app_id,
-                "hidden": app_id in HIDDEN_APPS,
+                "hidden": app_hidden(app_id, base),
                 "description": info.get_description() or "",
                 "categories": [c for c in (info.get_categories() or "").split(";") if c],
                 "keywords": list(info.get_keywords() or []),
@@ -506,6 +494,7 @@ class DesktopShell(Backend):
             if icons[app_id] is None and isinstance(info.get_icon(), Gio.ThemedIcon):
                 themed_names[app_id] = list(info.get_icon().get_names())  # tried against PolyOS's own set
         apps.sort(key=lambda a: a["name"].casefold())
+        supersede_browsers(apps, base)
 
         index: dict[str, str] = {}
         for pass_no in range(3):  # StartupWMClass beats desktop id beats executable name
@@ -521,6 +510,13 @@ class DesktopShell(Backend):
                 for key in keys:
                     if key:
                         index.setdefault(key.lower(), app_id)
+        exes = {}
+        for app_id, info in infos.items():  # program name -> app, for apps running in the background
+            exe = Path(info.get_executable() or "").name.lower()
+            if exe and exe not in GENERIC_EXECUTABLES:
+                exes.setdefault(exe, app_id)
+                exes.setdefault(exe[:15], app_id)  # the kernel keeps 15 characters of a process's name
+        self._exes = exes
         self._infos, self._apps, self._app_icons, self._wm_index = infos, apps, icons, index
         self._app_icon_names = themed_names
         self._icon_cache.clear()
@@ -619,7 +615,12 @@ class DesktopShell(Backend):
             return self.open_app("files", str(p))
         if not p.exists():
             raise ApiError("That file no longer exists.", 404)
+        if self.settings.get("keepRecent"):  # the Start menu's Recommended (GTK's recent files)
+            GLib.idle_add(lambda: Gtk.RecentManager.get_default().add_item(p.as_uri()) and False)
         return on_main(self._open_uri_main, p.as_uri())
+
+    def _exe_index(self) -> dict[str, str]:
+        return getattr(self, "_exes", {})
 
     def _open_uri_main(self, uri: str):
         ctx = Gdk.Display.get_default().get_app_launch_context()
@@ -794,6 +795,39 @@ class DesktopShell(Backend):
                 self._refresh_system(parts)
             except Exception:
                 log.exception("system poll failed")
+            try:
+                self._watch_screens()
+            except Exception:  # noqa: BLE001
+                log.exception("screen watch failed")
+            try:
+                self._track_usage()
+            except Exception:  # noqa: BLE001 - usage is a nicety
+                log.debug("usage tracking failed", exc_info=True)
+
+    def _watch_screens(self) -> None:
+        """A screen plugged in or out: arrange them again (X doesn't turn a new screen on by itself)."""
+        now = display.connectors()
+        if now != getattr(self, "_connectors", now):
+            log.info("screens changed: %s", now)
+            time.sleep(1)  # let the new screen finish introducing itself (EDID)
+            self.apply_display_layout()
+            GLib.idle_add(lambda: (self._relayout_soon(), False)[1])
+        self._connectors = now
+
+    def _track_usage(self) -> None:
+        """Settings > Apps > Usage: the seconds since the last poll go to the app in front, if someone's there."""
+        now = time.monotonic()
+        last, self._usage_last = getattr(self, "_usage_last", None), now
+        if last is None or now - last > 120 or self._locked_flag():
+            return
+        idle = self._idle.idle_ms() if self._idle else 0
+        if idle is not None and idle > 120000:
+            return
+        active = next((w for w in self.windows() if w.get("active") and not w.get("minimized")), None)
+        self.usage_tick(active.get("appId") if active else None, now - last)
+
+    def _locked_flag(self) -> bool:
+        return self._lock_flag.exists()
 
     def system_status(self) -> dict:
         with self._system_lock:
@@ -959,6 +993,7 @@ class DesktopShell(Backend):
     # An override-redirect window over every monitor that grabs the keyboard and pointer, so
     # it appears instantly (no switch to the login screen) and shortcuts can't get past it.
     def lock(self):
+        self.jobs.admin.forget()  # the administrator password is asked again after locking
         try:
             self._lock_flag.touch()
         except OSError:
@@ -1018,6 +1053,10 @@ class DesktopShell(Backend):
 
         with self._unlock_lock:
             self.unlock_throttle.check()
+            if self.pin_unlock(password):  # a PIN (Settings > Account), checked as root
+                self.unlock_throttle.succeeded()
+                GLib.idle_add(self._unlock_main)
+                return {"ok": True}
             try:
                 ok = pamauth.authenticate(getpass.getuser(), password)
             except OSError as exc:
@@ -1025,8 +1064,10 @@ class DesktopShell(Backend):
                 raise ApiError("Unlocking isn't working. Restart the computer.", 500) from None
             if not ok:
                 self.unlock_throttle.failed()
-                raise ApiError("That password isn't right. Try again.", 403)
+                raise ApiError("That PIN or password isn't right. Try again." if self.pin_status()["set"]
+                               else "That password isn't right. Try again.", 403)
             self.unlock_throttle.succeeded()
+            threading.Thread(target=self.pin_reset, daemon=True).start()
         GLib.idle_add(self._unlock_main)
         return {"ok": True}
 
@@ -1039,6 +1080,26 @@ class DesktopShell(Backend):
             raise ApiError(str(exc), 403) from None
         GLib.idle_add(self._unlock_main)
         return {"ok": True}
+
+    def _watch_gnome_background(self) -> None:
+        """Photos (Ristretto) and other apps set the wallpaper through GNOME's background setting: follow it."""
+        source = Gio.SettingsSchemaSource.get_default()
+        if source is None or source.lookup("org.gnome.desktop.background", True) is None:
+            return
+        self._gnome_bg = Gio.Settings.new("org.gnome.desktop.background")
+
+        def changed(settings, key):
+            uri = settings.get_string(key)
+            if not uri.startswith("file://"):
+                return
+            path = Gio.File.new_for_uri(uri).get_path()
+            if path and path != self.settings.get("wallpaper"):
+                try:
+                    self.update_settings({"wallpaper": path})
+                except ApiError as exc:
+                    log.info("background from another app not used: %s", exc)
+        self._gnome_bg.connect("changed::picture-uri", changed)
+        self._gnome_bg.connect("changed::picture-uri-dark", changed)
 
     def _watch_logind(self) -> None:
         """Lock before sleeping, and when something asks logind to lock this session."""
@@ -1256,6 +1317,14 @@ class DesktopShell(Backend):
             theme.switch_openbox(paths.runtime_dir() / "openbox-rc.xml", settings["theme"])
         if "showAllApps" in patch:
             self.bus.publish("apps", apps=self._apps)
+        if "nightLight" in patch:
+            threading.Thread(target=self.apply_night_light, daemon=True).start()
+        if "airplaneMode" in patch:
+            def airplane():
+                self.apply_airplane(settings["airplaneMode"])
+                time.sleep(0.5)
+                self._refresh_system(("network",))
+            threading.Thread(target=airplane, daemon=True).start()
         if "backgroundLimit" in patch and not self._game_active:
             self._poll_interval = self._base_poll()
         return settings
@@ -1287,6 +1356,7 @@ class DesktopShell(Backend):
                     self.update_settings({"wallpaper": chooser.get_filename()})
                 except ApiError as exc:
                     log.warning("wallpaper rejected: %s", exc)
+                    self.notify("That picture can't be a wallpaper", "Use a JPG, PNG, WebP or AVIF image.")
             self._chooser = None
 
         dialog.connect("response", on_response)
@@ -1336,9 +1406,10 @@ def main(argv: list[str] | None = None) -> int:
     bus = EventBus()
     token = secrets.token_urlsafe(32)
     shell = DesktopShell(settings, bus, token, debug=args.debug)
-    server = Server(shell, paths.UI_DIR, token)
+    ctl_token = secrets.token_urlsafe(32)  # polyos-ctl's own, limited token (server.CTL_API)
+    server = Server(shell, paths.UI_DIR, token, ctl_token=ctl_token)
     server.start()
-    paths.write_runtime_info({"port": server.port, "token": token, "pid": os.getpid(), "version": __version__})
+    paths.write_runtime_info({"port": server.port, "token": ctl_token, "pid": os.getpid(), "version": __version__})
 
     shell.start(server.base_url)
     if shell._live:

@@ -40,6 +40,7 @@ KIND_BY_SUFFIX = {  # common types some systems' mime tables miss
     ".pptx": "slides", ".odp": "slides", ".iso": "disc", ".img": "disc", ".deb": "package",
     ".7z": "archive", ".rar": "archive", ".xz": "archive", ".zst": "archive", ".sb3": "archive",
     ".mkv": "video", ".webm": "video", ".flac": "audio", ".ogg": "audio", ".opus": "audio", ".webp": "image",
+    ".jfif": "image", ".avif": "image", ".heic": "image",
 }
 BAD_NAME = re.compile(r"[/\x00]")
 USER_DIRS = [("desktop", "Desktop"), ("documents", "Documents"), ("download", "Downloads"),
@@ -387,3 +388,35 @@ class FileSystem:
     def trash_count(self) -> int:
         folder = self.trash / "files"
         return sum(1 for _ in folder.iterdir()) if folder.is_dir() else 0
+
+
+RECENT_XBEL = Path(".local/share/recently-used.xbel")
+
+
+def recent_files(home: Path, limit: int = 8) -> list[dict]:
+    """Files opened lately (newest first), for the Start menu's Recommended: {name, path, time}."""
+    import xml.etree.ElementTree as ET
+
+    try:
+        root = ET.parse(home / RECENT_XBEL).getroot()
+    except (OSError, ET.ParseError):
+        return []
+    seen, out = set(), []
+    for bm in root.iter("bookmark"):
+        href = bm.get("href") or ""
+        if not href.startswith("file://"):
+            continue
+        path = Path(urllib.parse.unquote(urllib.parse.urlsplit(href).path))
+        if path in seen or any(part.startswith(".") for part in path.parts[1:]):
+            continue
+        seen.add(path)
+        stamps = []
+        for key in ("visited", "modified", "added"):
+            try:
+                stamps.append(datetime.datetime.fromisoformat((bm.get(key) or "").replace("Z", "+00:00")).timestamp())
+            except ValueError:
+                pass
+        if stamps and path.is_file():
+            out.append({"name": path.name, "path": str(path), "time": int(max(stamps)), "kind": kind_of(path, False)[1]})
+    out.sort(key=lambda f: -f["time"])
+    return out[:limit]

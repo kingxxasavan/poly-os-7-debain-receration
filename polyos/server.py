@@ -3,7 +3,13 @@
 Security model: the server binds to 127.0.0.1 only, rejects foreign Host headers
 (DNS rebinding), and every API/icon/wallpaper request must carry a random per-session
 token. In the real shell the token reaches the pages through a WebKit user script, so
-it is never served over HTTP; it is only embedded in HTML in dev mode (mock backend).
+it is never served over HTTP or written to disk; it is only embedded in HTML in dev mode.
+
+polyos-ctl (keybindings, the command line) gets a second token, written to the session's
+runtime file, that opens only CTL_API: popups, apps, volume, brightness, power. So another
+program running as you (or a command Vara runs) can't reach installing, drivers, accounts or
+settings through the shell. The web UI is not the security boundary either way: everything
+done as root goes through polyos-admin, which checks every request itself.
 """
 
 from __future__ import annotations
@@ -17,7 +23,6 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
-from . import vara_toolmaker
 from .backend import MIXER_TABS, OPEN_APPS, POWER_ACTIONS, RUN_TARGETS
 from .core import IMAGE_TYPES, ApiError
 from .vara import tools_overview
@@ -107,6 +112,12 @@ def _q(query: dict, key: str) -> str | None:
     return query.get(key, [None])[0]
 
 
+# What polyos-ctl may do (its token opens nothing else).
+CTL_API = {("GET", "/api/state"), *{("POST", p) for p in (
+    "/api/popup", "/api/open", "/api/files/open", "/api/volume", "/api/brightness", "/api/power", "/api/run",
+    "/api/shell/restart", "/api/settings")}}
+CTL_SETTINGS = {"developerMode"}  # `polyos-ctl dev off` rescues a broken interface
+
 GET_API = {
     "/api/state": lambda be, q: be.state(),
     "/api/wifi": lambda be, q: be.wifi_list(),
@@ -118,12 +129,18 @@ GET_API = {
     "/api/files/search": lambda be, q: be.files.search(_q(q, "path"), _q(q, "q") or "", _q(q, "hidden") == "1"),
     "/api/files/info": lambda be, q: be.files.info(_q(q, "path") or ""),
     "/api/greeter/state": lambda be, q: be.greeter_state(),
+    "/api/recent-files": lambda be, q: {"files": be.recent_files()},
+    "/api/storage": lambda be, q: be.storage(),
+    "/api/monitors": lambda be, q: {"monitors": be.monitors()},
+    "/api/drivers/firmware": lambda be, q: be.firmware_status(),
+    "/api/power/windows": lambda be, q: {"available": be.windows_installed()},
+    "/api/account/pin": lambda be, q: be.pin_status(),
+    "/api/power/keys": lambda be, q: be.power_keys(),
+    "/api/apps/usage": lambda be, q: be.usage(),
+    "/api/background-apps": lambda be, q: {"apps": be.background_apps()},
     "/api/vara/history": lambda be, q: be.vara.state(),
     "/api/vara/tools": lambda be, q: tools_overview(be.vara),
     "/api/vara/config": lambda be, q: be.vara.config.public(),
-    "/api/vara/said": lambda be, q: be.vara.said(int(_q(q, "after") or 0) if (_q(q, "after") or "0").isdigit() else 0),
-    "/api/vara/voice": lambda be, q: be.vara_voice_status(),
-    "/api/hud": lambda be, q: be.hud_data(),
     "/api/admin/status": lambda be, q: be.admin_status(),
     "/api/jobs": lambda be, q: {"jobs": be.jobs.list()},
     "/api/install/probe": lambda be, q: be.install_probe(),
@@ -211,24 +228,24 @@ POST_API = {
     "/api/files/restore": lambda be, b: be.files_restore(_str_list(b, "names")),
     "/api/files/empty-trash": lambda be, b: be.files_empty_trash(),
     "/api/files/open": lambda be, b: be.open_path(_str(b, "path", 4096)),
+    "/api/background-apps/end": lambda be, b: be.end_background_app(_str(b, "app", 300)),
+    "/api/jobs/cancel": lambda be, b: be.jobs.cancel(_str(b, "id", 20)),
+    "/api/displays/mode": lambda be, b: be.display_mode_set(_str(b, "mode", 20)),
+    "/api/power/windows": lambda be, b: be.restart_to_windows(),
+    "/api/drivers/firmware": lambda be, b: be.firmware_install(),
+    "/api/account/pin": lambda be, b: be.pin_set(b.get("password") if isinstance(b.get("password"), str) else "", _str(b, "pin", 6)),
+    "/api/account/pin/remove": lambda be, b: be.pin_set(b.get("password") if isinstance(b.get("password"), str) else "", None),
+    "/api/storage/clean": lambda be, b: be.storage_clean(_choice(b, "what", ("thumbnails", "trash", "packages"))),
+    "/api/power/keys": lambda be, b: be.power_keys_set(_str(b, "lid", 20), _str(b, "lidPlugged", 20), _str(b, "button", 20)),
+    "/api/apps/usage/clear": lambda be, b: be.usage_clear(),
     "/api/files/terminal": lambda be, b: be.terminal_at(_str(b, "path", 4096)),
     "/api/shell/restart": lambda be, b: be.restart_shell(),
     "/api/setup/done": lambda be, b: be.finish_setup(),
-    "/api/vara/chat": lambda be, b: be.vara.chat(be, _str(b, "message", 4000),
-                                                 b.get("source") if b.get("source") in ("typed", "voice") else "typed"),
-    "/api/vara/voice": lambda be, b: be.vara_voice_state(_str(b, "state", 20), b.get("text") if isinstance(b.get("text"), str) else ""),
-    "/api/vara/voice/listen": lambda be, b: be.vara_voice_listen(),
-    "/api/hud": lambda be, b: be.hud(bool(_opt_bool(b, "open"))),
-    "/api/vara/tools/open": lambda be, b: be.vara_tool_open(_str(b, "name", 40)),
-    "/api/vara/index/rebuild": lambda be, b: be.vara_index_rebuild(),
-    "/api/vara/voice/install": lambda be, b: be.vara_voice_install(),
-    "/api/vara/scheduled/cancel": lambda be, b: (be.vara.schedule.cancel(_str(b, "id", 20)), {"scheduled": be.vara.schedule.items()})[1],
+    "/api/vara/chat": lambda be, b: be.vara.chat(be, _str(b, "message", 4000)),
     "/api/vara/reset": lambda be, b: be.vara.reset(),
     "/api/vara/config": lambda be, b: be.vara.config.update(
         _opt_str(b, "endpoint"), _opt_str(b, "model"), b.get("apiKey") if isinstance(b.get("apiKey"), str) else None,
-        _opt_str(b, "workspace"), _opt_str(b, "approval"), _opt_str(b, "provider"),
-        b.get("expert") if isinstance(b.get("expert"), dict) else None),
-    "/api/vara/tools/remove": lambda be, b: (vara_toolmaker.remove(be.vara.home, _str(b, "name", 40)), tools_overview(be.vara))[1],
+        _opt_str(b, "workspace"), _opt_str(b, "approval"), _opt_str(b, "provider")),
     "/api/vara/approve": lambda be, b: be.vara.approve(_str(b, "id", 80), _choice(b, "decision", ("allow", "always", "deny"))),
     "/api/vara/stop": lambda be, b: be.vara.stop(),
     "/api/vara/forget": lambda be, b: {"memory": be.vara.memory.forget(_opt_int(b, "index"))},
@@ -288,8 +305,9 @@ class _HTTPServer(ThreadingHTTPServer):
 
 class Server:
     def __init__(self, backend, ui_dir: Path, token: str, dev: bool = False, port: int = 0,
-                 allow: set[str] | None = None):
+                 allow: set[str] | None = None, ctl_token: str | None = None):
         self.backend = backend
+        self.ctl_token = ctl_token  # polyos-ctl's: CTL_API only
         self.allow = allow  # when set, the only protected paths this server answers (the login screen)
         self.ui_dir = Path(ui_dir).resolve()
         self.token = token
@@ -311,8 +329,16 @@ class Server:
         self.httpd.server_close()
 
     def authorized(self, *candidates: str | None) -> bool:
-        expected = self.token.encode()
-        return any(c and hmac.compare_digest(c.encode(), expected) for c in candidates)
+        return self.role(*candidates) == "ui"
+
+    def role(self, *candidates: str | None) -> str | None:
+        """"ui" for the interface's token, "ctl" for polyos-ctl's, None otherwise."""
+        for c in candidates:
+            if c and hmac.compare_digest(c.encode(), self.token.encode()):
+                return "ui"
+            if c and self.ctl_token and hmac.compare_digest(c.encode(), self.ctl_token.encode()):
+                return "ctl"
+        return None
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -340,8 +366,12 @@ class _Handler(BaseHTTPRequestHandler):
             path = unquote(url.path)
             if path.startswith(("/api/", "/icon/", "/wallpaper/", "/files/")):
                 query_token = parse_qs(url.query).get("t", [None])[0]
-                if not self.app.authorized(self.headers.get("X-PolyOS-Token"), query_token):
+                role = self.app.role(self.headers.get("X-PolyOS-Token"), query_token)
+                if role is None:
                     raise ApiError("unauthorized", 401)
+                self._ctl = role == "ctl"
+                if self._ctl and (method, path) not in CTL_API:
+                    raise ApiError("polyos-ctl can't do that", 403)
                 if self.app.allow is not None and path not in self.app.allow:
                     raise ApiError("not found", 404)
                 if method == "POST":
@@ -407,6 +437,8 @@ class _Handler(BaseHTTPRequestHandler):
             raise ApiError("invalid JSON") from None
         if not isinstance(body, dict):
             raise ApiError("expected a JSON object")
+        if getattr(self, "_ctl", False) and path == "/api/settings" and set(body) - CTL_SETTINGS:
+            raise ApiError("polyos-ctl can't change that setting", 403)
         result = handler(self.app.backend, body)
         self._json({"ok": True} if result is None else result)
 

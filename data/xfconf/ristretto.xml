@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- PolyOS: Photos (Ristretto) sets the wallpaper the GNOME way, which PolyOS follows. -->
+<channel name="ristretto" version="1.0">
+  <property name="desktop" type="empty">
+    <property name="type" type="string" value="gnome"/>
+  </property>
+</channel>

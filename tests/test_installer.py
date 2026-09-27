@@ -212,17 +212,6 @@ class PlanValidationTests(unittest.TestCase):
         self.assertNotIn("performanceProfile", odd["extraSettings"])
         self.assertIsNone(odd["polyAccount"])
 
-    def test_vara_from_setup(self):
-        """Developer edition: "Yes, set up Vara" and its AI key come along; other editions can't ask for it."""
-        cfg = {"provider": "claude", "endpoint": "https://api.anthropic.com/", "model": "claude-opus-5", "apiKey": "sk-ant-1234567890"}
-        dev = installer.validate_plan(self.plan(edition="developer", vara=True, varaConfig=cfg))
-        self.assertEqual(dev["varaConfig"], {**cfg, "endpoint": "https://api.anthropic.com"})
-        self.assertTrue(dev["firstStart"]["vara"])
-        for bad in ({**cfg, "endpoint": "http://evil.example"}, {**cfg, "apiKey": "has spaces in it"}, "sk-123"):
-            with self.subTest(bad=bad):
-                self.assertIsNone(installer.validate_plan(self.plan(edition="developer", vara=True, varaConfig=bad))["varaConfig"])
-        self.assertIsNone(installer.validate_plan(self.plan(edition="gaming", vara=True, varaConfig=cfg))["varaConfig"])
-
     def test_blank_password_allowed(self):
         clean = installer.validate_plan(self.plan(user={"fullName": "", "username": "andrew", "password": ""}))
         self.assertEqual(clean["user"]["fullName"], "andrew")
@@ -592,3 +581,33 @@ class DualBootTests(unittest.TestCase):
         self.assertIn("BitLocker", d["install"]["reason"])
         self.assertTrue(c["install"]["possible"])  # erasing the encrypted partition itself is fine
         self.assertTrue(all(not r["install"]["possible"] for r in out["free"]))
+
+
+class WindowsAsleepTests(unittest.TestCase):
+    """Windows with Fast Startup is only asleep: PolyOS mustn't change its drive (Automatic Repair loop)."""
+
+    def test_asleep_windows_blocks_changes_next_to_it(self):
+        disk = {"path": "/dev/sda", "model": "SSD", "size": 500 * installer.GiB, "readonly": False, "isLive": False,
+                "table": "gpt", "partitions": [
+                    {"path": "/dev/sda3", "size": 200 * installer.GiB, "fstype": "ntfs", "ntfsState": "hibernated",
+                     "install": {"possible": True}, "label": "Windows"},
+                    {"path": "/dev/sda4", "size": 200 * installer.GiB, "fstype": "ntfs", "ntfsState": None,
+                     "install": {"possible": True}, "label": "Data", "esp": False}],
+                "free": [{"start": 1, "bytes": 90 * installer.GiB, "install": {"possible": True}}],
+                "alongside": {"possible": True}}
+        other = {"path": "/dev/sdb", "model": "USB", "size": 64 * installer.GiB, "readonly": False, "isLive": False,
+                 "table": "gpt", "partitions": [{"path": "/dev/sdb1", "size": 60 * installer.GiB, "fstype": "ext4",
+                                                 "install": {"possible": True}}], "free": [], "alongside": {"possible": False}}
+        out = installer.finish_install_options([disk, other], uefi=False)
+        self.assertEqual([v["path"] for v in installer.windows_asleep(out)], ["/dev/sda3"])
+        self.assertFalse(out[0]["alongside"]["possible"])
+        self.assertFalse(out[0]["free"][0]["install"]["possible"])
+        self.assertFalse(out[0]["partitions"][1]["install"]["possible"])  # D: too: Windows had it open
+        self.assertIn("Fast Startup", out[0]["partitions"][1]["install"]["reason"])
+        self.assertTrue(out[1]["partitions"][0]["install"]["possible"])  # a drive without Windows is fine
+
+    def test_boot_menu_waits_for_no_one(self):
+        from pathlib import Path as P
+        text = (P(__file__).resolve().parent.parent / "data/grub-defaults/50-polyos-menu.cfg").read_text()
+        self.assertIn("GRUB_TIMEOUT_STYLE=hidden", text)
+        self.assertIn("GRUB_DEFAULT=saved", text)

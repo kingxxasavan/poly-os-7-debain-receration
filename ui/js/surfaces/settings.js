@@ -9,19 +9,25 @@ import { fill, formatBytes, h, hexToHue, hueToHex, icon, networkLabel, throttle 
 const PAGES = [
   ['display', 'Display', 'monitor'],
   ['sound', 'Sound', 'volume'],
-  ['account', 'Account', 'user'],
-  ['polyaccount', 'Poly Account', 'globe'],
+  ['account', 'Account', 'user'], // your Poly Account and how you sign in (one page)
   ['privacy', 'Privacy & Security', 'shield'],
   ['network', 'Wi-Fi & Network', 'wifi'],
-  ['appearance', 'Appearance', 'palette'],
+  ['appearance', 'Personalization', 'palette'],
   ['taskbar', 'Taskbar & Desktop', 'taskbar'],
   ['gaming', 'Gaming', 'gamepad'],
   ['vara', 'Vara', 'chat'],
   ['apps', 'Apps', 'apps'],
+  ['storage', 'Storage', 'disk'],
   ['power', 'Power & Performance', 'bolt'],
   ['updates', 'Updates', 'download'],
   ['developer', 'Developer', 'code'],
   ['about', 'About', 'info'],
+];
+const SCREEN_MODES = [
+  ['duplicate', 'Duplicate', 'The same picture on every screen'],
+  ['extend', 'Extend', 'One big desktop across your screens'],
+  ['main', 'This screen only', 'The other screens stay off'],
+  ['second', 'Second screen only', 'For a laptop closed on a desk'],
 ];
 // PolyOS blue first; the rest share its softness so text on them stays readable.
 const ACCENTS = ['#678fd9', '#9b7fe0', '#d97fb8', '#e0906a', '#d9c46a', '#81d862', '#5fc4c4', '#b5b5b5'];
@@ -149,7 +155,7 @@ const pages = {
         icon(m === 'dark' ? 'moon' : 'sun'), m === 'dark' ? 'Dark' : 'Light')));
 
     page.append(
-      pageHead('Appearance', 'Customize the look and feel of PolyOS.'),
+      pageHead('Personalization', 'Your wallpaper, colors and the look and feel of PolyOS.'),
       err,
       group('Mode', row('Appearance', 'Dark or light, for PolyOS and your apps. Open apps update when you reopen them.', modes)),
       group('Accent color',
@@ -163,7 +169,7 @@ const pages = {
       group('Clock',
         row('24-hour time', null, clock24),
         row('Show seconds in the taskbar', null, seconds)),
-      group('Launcher',
+      group('Start menu',
         row('Show all apps', 'Include system tools PolyOS normally hides, like the volume mixer and network editor', allApps)),
     );
 
@@ -197,7 +203,7 @@ const pages = {
     const seconds = toggle(s().showSeconds, (v) => save({ showSeconds: v }, err), 'Show seconds');
     const open = seg('Open desktop shortcuts with', [['double', 'Double-click'], ['single', 'Single click']], (v) => save({ desktopOpen: v }, err));
     const deskClock = toggle(s().desktopClock, (v) => save({ desktopClock: v }, err), 'Desktop clock');
-    const pins = appList(store, 'pinned', 'Nothing is pinned. Pin apps from the launcher.');
+    const pins = appList(store, 'pinned', 'Nothing is pinned. Right-click an app in Start to pin it.');
     const shortcuts = appList(store, 'desktopIcons', 'No shortcuts on the desktop yet.');
     const launcher = (target) => h('button.btn', {
       onclick: () => api.post('/api/popup', { view: 'launcher', data: target ? { target } : {} }).catch((e) => errorText(err, e.message)),
@@ -215,7 +221,7 @@ const pages = {
         row('Show seconds', null, seconds)),
       group('Pinned apps', pins, h('div.pad', launcher(null))),
       group('Desktop',
-        row('Open shortcuts with', 'Right-click the desktop or any app in the launcher to add shortcuts', open),
+        row('Open shortcuts with', 'Right-click the desktop, or any app in Start, to add shortcuts', open),
         row('Clock on the desktop', 'Large time, date and greeting', deskClock)),
       group('Desktop shortcuts', shortcuts, h('div.pad', launcher('desktop'))),
     );
@@ -363,8 +369,6 @@ const pages = {
       screens,
       group('Scale', row('Display scale', 'Automatic picks 200% on high-density screens. Applies at next sign-in.', scale)),
       graphics,
-      group('Arrangement', row('Position multiple displays', 'Drag screens to match how they sit on your desk',
-        helperButton(store, 'arandr.desktop', 'Arrange displays', 'arandr'))),
     );
 
     const stateOf = (o) => ({ name: o.name, size: o.mode, rate: o.rate, rotation: o.rotation, primary: o.primary });
@@ -427,8 +431,15 @@ const pages = {
 
     function show(r) {
       outputs = r.outputs;
-      fill(screens, outputs.length ? outputs.map(screenGroup)
-        : group('Screen', row('Screen settings aren’t available', 'xrandr couldn’t read your screens')));
+      const mode = h('select.select', { 'aria-label': 'Multiple displays' },
+        SCREEN_MODES.map(([v, name]) => h('option', { value: v, selected: store.state.settings.displayMode === v }, name)));
+      mode.addEventListener('change', () => api.post('/api/displays/mode', { mode: mode.value })
+        .then(() => setTimeout(() => api.get('/api/displays').then(show, fail), 1500), fail));
+      fill(screens,
+        outputs.length > 1 ? group('Multiple displays', row('With more than one screen',
+          'Win+P switches too. PolyOS remembers this and sets it up again when you plug a screen in.', mode)) : null,
+        ...(outputs.length ? outputs.map(screenGroup)
+          : [group('Screen', row('Screen settings aren’t available', 'xrandr couldn’t read your screens'))]));
       if (r.graphics) {
         const drivers = h('button.btn', { onclick: () => api.post('/api/open', { app: 'drivers' }).catch(fail) }, 'Driver Manager', icon('external'));
         const nvidia = store.state.apps.find((a) => a.id === 'nvidia-settings.desktop');
@@ -498,11 +509,35 @@ const pages = {
       bgToggle.set(s().backgroundLimit === 'reduced');
     }
     api.get('/api/hardware').then(showPc, (e) => errorText(err, e.message));
+
+    // closing the lid and pressing the power button (logind does it; saving asks for your password)
+    const keysBox = h('div');
+    api.get('/api/power/keys').then((k) => {
+      const opts = Object.entries(k.actions);
+      const pick = (key, label) => {
+        const sel = h('select.select', { 'aria-label': label }, opts.map(([v, name]) => h('option', { value: v, selected: k[key] === v }, name)));
+        sel.addEventListener('change', async () => {
+          errorText(err, '');
+          const next = { ...k, [key]: sel.value };
+          try {
+            await withAdmin(() => api.post('/api/power/keys', { lid: next.lid, lidPlugged: next.lidPlugged, button: next.button }),
+              { title: 'Power button and lid', text: 'Enter your password to change what the lid and power button do.' });
+            k[key] = sel.value;
+          } catch (x) { sel.value = k[key]; if (!x.cancelled) errorText(err, x.message); }
+        });
+        return sel;
+      };
+      fill(keysBox, group('Lid and power button',
+        k.hasLid ? row('When I close the lid (on battery)', null, pick('lid', 'When I close the lid on battery')) : null,
+        k.hasLid ? row('When I close the lid (plugged in)', 'With another screen connected, closing the lid does nothing', pick('lidPlugged', 'When I close the lid plugged in')) : null,
+        row('When I press the power button', null, pick('button', 'When I press the power button'))));
+    }, () => {});
     page.append(
-      pageHead('Power & Performance', 'Power modes, battery, screen and sleep.'),
+      pageHead('Power & Performance', 'Power modes, battery, the lid and power button, screen and sleep.'),
       err,
       battery,
       group('Power mode', modes, modeNote),
+      keysBox,
       pcBox,
       timers,
       maxNote,
@@ -528,7 +563,19 @@ const pages = {
     return { update: (_st, changed) => (changed.has('system') || changed.has('settings')) && update() };
   },
 
+  // Account: your Poly Account first (connected: its card; not: sign in or create one), then how you
+  // sign in to this computer (PIN, password, recovery key) and lock options.
   account(page, store) {
+    page.append(pageHead('Account', 'Your Poly Account and how you sign in to this computer.'));
+    const cloud = h('div');
+    const local = h('div');
+    page.append(cloud, local);
+    const a = pages.polyaccount(cloud, store, { embedded: true });
+    const b = pages.signin(local, store);
+    return { close: () => a?.close?.(), update: (st, changed) => b?.update?.(st, changed) };
+  },
+
+  signin(page, store) {
     const { user } = store.state;
     const err = h('div.error-text', { hidden: true });
     const note = h('span.muted.small');
@@ -564,10 +611,44 @@ const pages = {
       }
     });
     const lockSleep = toggle(store.state.settings.lockOnSleep, (v) => save({ lockOnSleep: v }, err), 'Require sign-in on wake');
+
+    // PIN: 4 to 6 digits for the sign-in and lock screens; the password is still needed for anything admin
+    const pinBox = h('div');
+    function showPin(st) {
+      const pw = h('input.input', { type: 'password', placeholder: 'Your password', autocomplete: 'current-password', 'aria-label': 'Your password' });
+      const pin = h('input.input', { type: 'password', inputmode: 'numeric', maxlength: 6, placeholder: '4 to 6 digits', autocomplete: 'off', 'aria-label': 'New PIN' });
+      const pin2 = h('input.input', { type: 'password', inputmode: 'numeric', maxlength: 6, placeholder: 'Type it again', autocomplete: 'off', 'aria-label': 'Confirm PIN' });
+      const pinNote = h('span.muted.small');
+      const setBtn = h('button.btn.primary', st.set ? 'Change PIN' : 'Set up a PIN');
+      setBtn.addEventListener('click', async () => {
+        errorText(err, '');
+        if (!/^\d{4,6}$/.test(pin.value)) return errorText(err, 'A PIN is 4 to 6 digits.');
+        if (pin.value !== pin2.value) return errorText(err, 'The PINs don’t match.');
+        setBtn.disabled = true;
+        try {
+          showPin(await api.post('/api/account/pin', { password: pw.value, pin: pin.value }));
+          pinBox.querySelector('.pin-note').textContent = 'PIN saved. Use it on the sign-in and lock screens.';
+        } catch (e) { errorText(err, e.message); setBtn.disabled = false; }
+      });
+      const removeBtn = st.set ? h('button.btn', { onclick: async () => {
+        errorText(err, '');
+        try { showPin(await api.post('/api/account/pin/remove', { password: pw.value })); } catch (e) { errorText(err, e.message); }
+      } }, 'Remove PIN') : null;
+      fill(pinBox, group('PIN',
+        h('p.prose', st.set
+          ? 'You sign in and unlock with your PIN. Installing apps, updates and Terminal’s sudo still ask for your password. After 5 wrong PINs, the password is needed.'
+          : 'Sign in and unlock with a short PIN (4 to 6 digits) instead of your password. Anything that changes the system still asks for your password.'),
+        row('Your password', 'To set or remove the PIN', h('div.slider-wrap.wide', pw)),
+        row(st.set ? 'New PIN' : 'PIN', null, h('div.slider-wrap.wide', pin)),
+        row('Confirm PIN', null, h('div.slider-wrap.wide', pin2)),
+        h('div.btn-row', setBtn, removeBtn, h('span.muted.small.pin-note', pinNote))));
+    }
+    api.get('/api/account/pin').then(showPin, () => {});
+
     page.append(
-      pageHead('Account', 'Your sign-in details.'),
       err,
       group(null, row(user.fullName || user.name, `Username: ${user.name}`, h('span.gr-avatar.small.acct', (user.fullName || user.name).slice(0, 1).toUpperCase()))),
+      pinBox,
       group('Password',
         row('Current password', null, h('div.slider-wrap.wide', current)),
         row('New password', null, h('div.slider-wrap.wide', next)),
@@ -651,7 +732,7 @@ const pages = {
         h('div.row', h('div.row-label', h('span', 'Camera'), camInfo), camera),
         row('Microphone', 'Sound in Camera videos', mic)),
       group('Activity history',
-        row('Remember recently opened apps', 'Shown in the Home Menu. Turning this off also clears the list.', recent),
+        row('Remember recently opened apps', 'Shown in Start under Recommended. Turning this off also clears the list.', recent),
         row('Clear activity history', null, h('div.btn-row.inline', clear, note))),
       group('Account security',
         row('Password and recovery key', 'Change your password, or make a new recovery key for “Forgot Password”',
@@ -742,14 +823,96 @@ const pages = {
       return api.get('/api/apps/manage').then((d) => { data = d; renderStartup(); renderApps(); }, (x) => errorText(err, x.message));
     }
     search.addEventListener('input', () => data && renderApps());
-    page.append(
-      pageHead('Apps', 'Uninstall apps, and choose what starts when you sign in.'),
-      err,
-      group('Startup apps', startupBox),
-      group('Installed apps', h('div.slider-wrap.wide.app-search', search), listBox),
-    );
+
+    // Usage: time with each app in front, today and over the last 7 days (kept on this computer)
+    const usageBox = h('div');
+    const hm = (secs) => (secs < 60 ? `${Math.round(secs)} s` : secs < 3600 ? `${Math.round(secs / 60)} min`
+      : `${Math.floor(secs / 3600)} h ${Math.round((secs % 3600) / 60)} min`);
+    function renderUsage(u) {
+      if (!u.on) {
+        return fill(usageBox, group('Usage', h('p.prose', 'Usage isn’t kept while “Remember recently opened apps” is off (Privacy & Security).')));
+      }
+      const top = Math.max(1, ...u.days.map((d) => d.seconds));
+      const bars = h('div.usage-bars', u.days.map((d) => h('div.usage-bar', { title: hm(d.seconds) },
+        h('span', { style: { height: `${Math.max(2, (100 * d.seconds) / top)}%` } }),
+        h('small', new Date(`${d.day}T12:00`).toLocaleDateString([], { weekday: 'short' })))));
+      const weekTop = Math.max(1, ...u.apps.map((a) => a.week));
+      fill(usageBox,
+        group('Screen time, last 7 days', bars),
+        group('By app', u.apps.length ? u.apps.map((a) => h('div.row.app-row', h('img.app-row-icon', { src: withToken(a.icon), alt: '' }),
+          h('div.row-label', h('span', a.name), h('small', `Today ${hm(a.today)} · This week ${hm(a.week)}`),
+            h('div.usage-line', h('span', { style: { width: `${(100 * a.week) / weekTop}%` } })))))
+          : h('p.prose', 'Nothing yet. The apps you use show up here over the day.'),
+        h('div.btn-row.pad', h('button.btn', { onclick: () => api.post('/api/apps/usage/clear', {}).then(renderUsage, (x) => errorText(err, x.message)) }, 'Clear usage history'))));
+    }
+
+    const panels = {
+      installed: group('Installed apps', h('div.slider-wrap.wide.app-search', search), listBox),
+      startup: group('Startup apps', h('p.prose.small', 'These start when you sign in. Fewer startup apps means a faster start.'), startupBox),
+      usage: usageBox,
+    };
+    const body = h('div');
+    const tabs = seg('Apps', [['installed', 'Installed apps'], ['startup', 'Startup apps'], ['usage', 'Usage']], (v) => show(v));
+    tabs.classList.add('page-tabs');
+    function show(v) {
+      tabs.set(v);
+      fill(body, panels[v]);
+      if (v === 'usage') api.get('/api/apps/usage').then(renderUsage, (x) => errorText(err, x.message));
+    }
+    page.append(pageHead('Apps', 'Installed apps, what starts when you sign in, and how much you use each one.'), err, tabs, body);
+    show('installed');
     load();
     return { update: (_st, changed) => changed.has('apps') && load(), close: offJobs };
+  },
+
+  storage(page) {
+    const err = h('div.error-text', { hidden: true });
+    const body = h('div', h('p.prose', 'Measuring…'));
+    const gb = (n) => (n >= 1e12 ? `${(n / 1e12).toFixed(1)} TB` : n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : `${Math.round(n / 1e6)} MB`);
+    const openFolder = (path) => api.post('/api/files/open', { path }).catch((x) => errorText(err, x.message));
+    const clean = (what, btn) => async () => {
+      errorText(err, '');
+      btn.disabled = true;
+      try {
+        const r = await withAdmin(() => api.post('/api/storage/clean', { what }),
+          { title: 'Delete downloaded packages', text: 'Enter your password to delete the app packages PolyOS already installed.' });
+        if (r && r.state === 'running') watchJobs((job) => { if (job.kind === 'clean' && job.state !== 'running') load(); });
+        else load();
+      } catch (x) { if (!x.cancelled) errorText(err, x.message); btn.disabled = false; }
+    };
+    function render(d) {
+      const drives = d.drives.map((dr) => {
+        const pct = Math.round((100 * dr.used) / dr.total);
+        return h('div.storage-drive',
+          h('div.storage-drive-head', icon('disk'), h('b', dr.mount === '/' ? 'This computer (PolyOS)' : dr.mount),
+            h('span.muted.small', `${gb(dr.free)} free of ${gb(dr.total)}`)),
+          h('div.storage-meter', { class: pct > 90 ? 'full' : '' }, h('span', { style: { width: `${pct}%` } })),
+          dr.mount !== '/' ? h('button.link-btn', { onclick: () => openFolder(dr.mount) }, 'Open in Files') : null);
+      });
+      const biggest = Math.max(1, ...d.folders.map((f) => f.bytes));
+      const folders = d.folders.map((f) => h('div.row.storage-row',
+        h('div.row-label', h('span', f.name), h('small', `${f.complete ? '' : 'at least '}${gb(f.bytes)}`),
+          h('div.usage-line', h('span', { style: { width: `${(100 * f.bytes) / biggest}%` } }))),
+        ['Trash', 'Thumbnails', 'App caches'].includes(f.name) ? null
+          : h('button.btn', { onclick: () => openFolder(f.path) }, 'Open')));
+      const trashBtn = h('button.btn', 'Empty trash');
+      trashBtn.onclick = clean('trash', trashBtn);
+      const thumbBtn = h('button.btn', 'Clear');
+      thumbBtn.onclick = clean('thumbnails', thumbBtn);
+      const pkgBtn = h('button.btn', 'Delete');
+      pkgBtn.onclick = clean('packages', pkgBtn);
+      const size = (name) => gb(d.folders.find((f) => f.name === name)?.bytes || 0);
+      fill(body,
+        group('Drives', ...drives),
+        group('Your files', ...folders),
+        group('Free up space',
+          row('Trash', `${size('Trash')} in the trash`, trashBtn),
+          row('Thumbnails', `${size('Thumbnails')} of picture previews, made again when needed`, thumbBtn),
+          row('Downloaded app packages', `${gb(d.packageCache)} kept after installing apps and updates`, pkgBtn)));
+    }
+    function load() { api.get('/api/storage').then(render, (x) => errorText(err, x.message)); }
+    page.append(pageHead('Storage', 'How much space you have, what uses it, and what you can clear.'), err, body);
+    load();
   },
 
   gaming(page, store) {
@@ -821,7 +984,7 @@ const pages = {
     return { update: (_st, changed) => changed.has('settings') && update() };
   },
 
-  vara(page, store) {
+  vara(page) {
     const PRESETS = VARA_PROVIDERS;
     const err = h('div.error-text', { hidden: true });
     const note = h('span.muted.small');
@@ -862,19 +1025,6 @@ const pages = {
         errorText(err, e.message);
       }
     });
-    // Vara's voice, name, HUD, reminders, documents, tool making and expert helper are the Developer edition's
-    // (or developer mode's, in Settings › About); every edition keeps the classic agent.
-    const developerVara = () => !!(store.state.settings.developerMode || store.state.settings.edition === 'developer');
-    const extrasNote = group('More with the Developer edition', h('p.prose',
-      'The Developer edition adds Vara Voice (“Hey Vera”, or a name of your own), the HUD, Vara’s own web browser, ',
-      'reminders and routines, searching your documents, tools Vara makes for itself, and an expert helper for hard code. ',
-      'Turn on developer mode in Settings › About to use them.'));
-    function showExtras() {
-      const on = developerVara();
-      for (const g of [nameGroup, scheduleGroup, docsGroup, madeGroup, expertGroup]) g.hidden = !on;
-      extrasNote.hidden = on;
-      if (!on) voiceGroup.hidden = true;
-    }
     // ---- the agent: workspace, approvals, tools, skills, memory ----
     const agentNote = h('p.prose.small', { hidden: true });
     const workspace = h('input.input', { placeholder: '~/Projects', spellcheck: 'false', 'aria-label': 'Workspace folder' });
@@ -900,15 +1050,6 @@ const pages = {
       agentNote);
     const toolsBody = h('div');
     const toolsGroup = group('Tools', toolsBody);
-    const madeBody = h('div');
-    const madeGroup = group('Tools it made', madeBody);
-    function showMade(made) {
-      fill(madeBody, made.length ? made.map((t) => row(`my_${t.name}`, `${t.description} · ${t.tested ? 'tested' : 'not working yet'}`,
-        h('div.btn-row',
-          h('button.btn', { onclick: () => api.post('/api/vara/tools/open', { name: t.name }).catch((x) => errorText(err, x.message)) }, 'Open in VS Code'),
-          h('button.btn', { onclick: () => api.post('/api/vara/tools/remove', { name: t.name }).then((r) => showMade(r.made), (x) => errorText(err, x.message)) }, 'Delete'))))
-        : h('p.prose', 'None yet. When a job keeps coming up, Vara writes itself a tool (a small Python program), tests it, and uses it from then on. Ask: “make yourself a tool that…”.'));
-    }
     const skillsBody = h('div');
     const skillsGroup = group('Skills', skillsBody);
     const memoryBody = h('div');
@@ -917,7 +1058,7 @@ const pages = {
     function showMemory(notes) {
       fill(memoryBody,
         notes.length
-          ? notes.map((n, i) => row(n.note, `${(n.kind || 'fact')[0].toUpperCase()}${(n.kind || 'fact').slice(1)} · saved ${n.added || ''}`.trim(), h('button.btn', {
+          ? notes.map((n, i) => row(n.note, `Saved ${n.added || ''}`.trim(), h('button.btn', {
             onclick: () => api.post('/api/vara/forget', { index: i }).then((r) => showMemory(r.memory), (e) => errorText(err, e.message)),
           }, 'Forget')))
           : h('p.prose', 'Nothing yet. Vara saves short notes when it learns something lasting, like your board, your printer or where your projects are.'),
@@ -926,153 +1067,12 @@ const pages = {
         }, 'Forget everything')) : null);
     }
 
-    // ---- its name: what it's called on screen and the word it answers to ("Jarvis") ----
-    const nameInput = h('input.input', { placeholder: 'Vara', maxlength: 20, spellcheck: 'false', 'aria-label': 'Assistant name',
-      value: store.state.settings.assistantName || '' });
-    const nameNote = h('span.muted.small');
-    nameInput.addEventListener('change', () => {
-      const v = nameInput.value.trim();
-      if (v && !/^[A-Za-z]{2,20}$/.test(v)) { errorText(err, 'A name is one word of 2 to 20 letters.'); return; }
-      save({ assistantName: v }, err);
-      nameNote.textContent = v ? `It answers to “Hey ${v}” (with Vara Voice).` : 'Vara, answering to “Hey Vera”.';
-    });
-    nameNote.textContent = store.state.settings.assistantName ? `It answers to “Hey ${store.state.settings.assistantName}”.` : 'Vara, answering to “Hey Vera”.';
-    const nameGroup = group('Name',
-      row('Call it', 'Give your assistant a name of its own, like Jarvis. Pick a common word or name, so speech recognition knows it',
-        h('div.slider-wrap.wide', nameInput)),
-      h('p.prose.small', nameNote));
-
-    // ---- Vara Voice: "Hey Vera", spoken answers, push to talk (Developer edition, or once installed) ----
-    const voiceBody = h('div');
-    const voiceGroup = group('Voice', voiceBody);
-    const voiceNote = h('p.muted.small', { hidden: true });
-    let voice = null;
-    const STATES = { off: 'Off', idle: 'Listening for its name', listening: 'Listening…', thinking: 'Working on it…', speaking: 'Speaking…' };
-    function showVoice() {
-      voiceGroup.hidden = !voice || !developerVara();
-      if (!voice) return;
-      if (!voice.installed) {
-        const install = h('button.btn.primary', 'Install Vara Voice');
-        install.addEventListener('click', async () => {
-          install.disabled = true;
-          errorText(err, '');
-          try {
-            await withAdmin(() => api.post('/api/vara/voice/install', {}),
-              { title: 'Install Vara Voice', text: 'Enter your password to install Vara Voice and Vara’s web browser (about 300 MB).' });
-          } catch (x) {
-            install.disabled = false;
-            if (!x.cancelled) errorText(err, x.message);
-          }
-        });
-        fill(voiceBody,
-          h('p.prose', 'Talk to Vara hands-free: say “Hey Vera” and ask. Vara answers out loud, and “stop” interrupts it. ',
-            'Speech is recognized on this computer; only your request goes to Vara, as if you typed it.'),
-          h('div.btn-row', install, voiceNote));
-        return;
-      }
-      const state = voice.running && (voice.state || 'idle') === 'idle' ? `Listening for “${voice.wakeWords}”`
-        : STATES[voice.running ? voice.state : 'off'] || voice.state;
-      const openMic = toggle(voice.openMic, (v) => {
-        if (v && !confirm('Always listening: everything said near this computer is written down and sent to your AI provider as a request. Turn it on?')) { openMic.set(false); return; }
-        save({ varaVoiceOpenMic: v }, err);
-      }, 'Always listening');
-      fill(voiceBody,
-        row('Vara Voice', voice.enabled ? state : 'Off', toggle(voice.enabled, (v) => save({ varaVoice: v }, err), 'Vara Voice')),
-        row('Wake words', 'Start talking with “Hey Vera”. Off: only Win+Shift+V starts listening',
-          toggle(voice.wake, (v) => save({ varaVoiceWake: v }, err), 'Wake words')),
-        row('Speak answers', 'Off: answers show in the Vara chat without being read out',
-          toggle(voice.speak, (v) => save({ varaVoiceSpeak: v }, err), 'Speak answers')),
-        row('Follow-ups', 'After an answer, keep listening for a few seconds, so the next question needs no name. “That’s all” ends it',
-          toggle(voice.followUp, (v) => save({ varaVoiceFollowUp: v }, err), 'Follow-ups')),
-        row('Always listening', 'Act on anything said, no name needed. Everything said nearby goes to your AI provider: use it alone, and with care',
-          openMic),
-        row('HUD', 'Open the full-screen HUD when it hears its name. Win+J opens it any time',
-          h('div.btn-row', toggle(voice.hud, (v) => save({ varaHud: v }, err), 'HUD'),
-            h('button.btn', { onclick: () => api.post('/api/hud', { open: true }).catch((x) => errorText(err, x.message)) }, 'Open'))),
-        row('Push to talk', 'Press Win+Shift+V anywhere, or the microphone in the Vara chat', h('button.btn', {
-          disabled: !voice.running, onclick: () => api.post('/api/vara/voice/listen', {}).catch((x) => errorText(err, x.message)),
-        }, icon('mic'), 'Try it')),
-        h('p.prose.small', `Try: “${voice.wakeWords}, what’s the weather tomorrow?”, “${voice.wakeWords}, open YouTube and play lofi music”, `,
-          `“${voice.wakeWords}, remind me at 5 to call Sam”. Say “stop” to interrupt, and “yes” or “no” when it asks first.`));
-    }
-    const loadVoice = () => api.get('/api/vara/voice').then((v) => { voice = v; showVoice(); }, () => {});
-    const offVoice = on('varaVoice', (e) => {
-      if (voice) { voice = { ...voice, state: e.state }; showVoice(); }
-    });
-    const { off: offVoiceJob } = watchJobs((job) => {
-      if (job.kind !== 'vara-voice') return;
-      voiceNote.hidden = false;
-      voiceNote.textContent = job.state === 'running' ? `${job.message || 'Installing…'}` : job.state === 'done'
-        ? 'Vara Voice is ready. Say “Hey Vera”.' : job.error || 'Vara Voice didn’t install.';
-      if (job.state !== 'running') loadVoice();
-    });
-
-    // ---- what it knows: the documents index ----
-    const docsBody = h('div');
-    const docsGroup = group('Files & documents', docsBody);
-    function showDocs(index) {
-      const on = store.state.settings.varaIndex !== false;
-      const when = index?.updated ? new Date(index.updated * 1000).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'not yet';
-      fill(docsBody,
-        row('Search my documents', 'Keeps a search index of Documents, Desktop, Downloads, Projects and the workspace (text, PDFs, Word and LibreOffice files, slides) on this computer only',
-          toggle(on, (v) => save({ varaIndex: v }, err), 'Search my documents')),
-        on ? row(`${index?.files ?? 0} files indexed`, `Updated ${when}; it refreshes every half hour, gently`, h('button.btn', {
-          onclick: () => api.post('/api/vara/index/rebuild', {}).then(() => setTimeout(loadAgent, 1500), (x) => errorText(err, x.message)),
-        }, 'Rebuild')) : null);
-    }
-
-    // ---- the expert helper: a second model for hard code (consult_expert) ----
-    const exEndpoint = h('input.input', { placeholder: 'https://api.anthropic.com', spellcheck: 'false', 'aria-label': 'Expert endpoint' });
-    const exModel = h('input.input', { placeholder: 'claude-opus-5', spellcheck: 'false', 'aria-label': 'Expert model' });
-    const exKey = h('input.input', { type: 'password', placeholder: 'Paste its API key', autocomplete: 'off', 'aria-label': 'Expert API key' });
-    const exNote = h('span.muted.small');
-    const exPresets = h('div.swatches', PRESETS.map((pr) => h('button.pill-btn', {
-      onclick: () => { exEndpoint.value = pr.endpoint; exModel.value = pr.model; exNote.textContent = pr.keyHint; },
-    }, pr.label)));
-    const saveExpert = async (off) => {
-      errorText(err, '');
-      try {
-        const c = await api.post('/api/vara/config', { expert: off ? { endpoint: '' } : {
-          endpoint: exEndpoint.value, model: exModel.value, provider: providerFor(exEndpoint.value), ...(exKey.value ? { key: exKey.value } : {}) } });
-        showExpert(c);
-        exNote.textContent = off ? 'Removed.' : 'Saved. Vara now asks it for help with hard code.';
-      } catch (x) { errorText(err, x.message); }
-    };
-    function showExpert(c) {
-      exEndpoint.value = c.expertEndpoint || '';
-      exModel.value = c.expertModel || '';
-      exKey.value = '';
-      exKey.placeholder = c.hasExpertKey ? 'Saved (type to replace)' : 'Paste its API key';
-    }
-    const expertGroup = group('Expert helper',
-      h('p.prose', 'A second AI model Vara asks when code gets hard: to write a tool, or to debug something stubborn. Claude is a good choice.'),
-      row('Provider', null, exPresets),
-      row('Endpoint', null, h('div.slider-wrap.wide', exEndpoint)),
-      row('Model', null, h('div.slider-wrap.wide', exModel)),
-      row('API key', 'Stored only on this computer', h('div.slider-wrap.wide', exKey)),
-      h('div.btn-row', h('button.btn.primary', { onclick: () => saveExpert(false) }, 'Save'), h('button.btn', { onclick: () => saveExpert(true) }, 'Remove'), exNote));
-
-    // ---- reminders and routines ----
-    const scheduleBody = h('div');
-    const scheduleGroup = group('Reminders & routines', scheduleBody);
-    function showScheduled(items) {
-      const when = (t) => new Date(t * 1000).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-      const repeat = { once: '', hourly: ' · every hour', daily: ' · every day', weekdays: ' · weekdays', weekly: ' · every week' };
-      fill(scheduleBody,
-        items.length ? items.map((it) => row(it.text, `${it.kind === 'routine' ? 'Routine' : 'Reminder'} · ${when(it.at)}${repeat[it.repeat] || ''}`,
-          h('button.btn', { onclick: () => api.post('/api/vara/scheduled/cancel', { id: it.id }).then((r) => showScheduled(r.scheduled), (x) => errorText(err, x.message)) }, 'Cancel')))
-          : h('p.prose', 'None yet. Ask Vara: “remind me at 5 to stretch”, or “every weekday at 8, summarize the news”. ',
-            'Routines run by themselves at their time; Vara shows the result and, with Vara Voice, says it.'));
-    }
-
     function loadAgent() {
-      api.get('/api/vara/config').then((c) => { workspace.value = c.workspace; approval.set(c.approval); showExpert(c); }, () => {});
+      api.get('/api/vara/config').then((c) => { workspace.value = c.workspace; approval.set(c.approval); }, () => {});
       api.get('/api/vara/tools').then((t) => {
         const { installed, missing } = t.programs;
         fill(toolsBody,
-          h('p.prose', developerVara()
-            ? 'Vara reads and writes files, runs commands and git, searches and browses the web, controls your browser and music, searches your documents, measures 3D models'
-            : 'Vara reads and writes files, runs commands and git, opens apps, reads web pages, measures 3D models',
+          h('p.prose', 'Vara reads and writes files, runs commands and git, measures 3D models and reads web pages',
             installed.length ? `, and uses ${installed.join(', ')} on this computer.` : '.'),
           missing.length ? row('Not installed', missing.join(', '), h('button.btn', {
             onclick: () => api.post('/api/open', { app: 'store' }).catch((e) => errorText(err, e.message)),
@@ -1082,14 +1082,11 @@ const pages = {
           h('p.prose.small', 'Skills are step-by-step know-how Vara reads before a task. Add your own as Markdown files in ',
             h('code', t.skillsFolder.replace(/^\/home\/[^/]+/, '~')), ', or ask Vara to save one after it works something out.'));
         showMemory(t.memory);
-        showScheduled(t.scheduled || []);
-        showDocs(t.index);
-        showMade(t.made || []);
       }, (e) => errorText(err, e.message));
     }
 
     page.append(
-      pageHead('Vara', 'Your PolyOS assistant for your apps, files, code, 3D models and robots, powered by the AI model you choose.'),
+      pageHead('Vara', 'Your PolyOS agent for code, 3D models and robots, powered by the AI model you choose.'),
       err,
       group('Quick setup', row('Provider', 'Fills in the address and a model; then add your key from that service', presets)),
       group('Connection',
@@ -1097,36 +1094,22 @@ const pages = {
         row('Model', null, h('div.slider-wrap.wide', model)),
         row('API key', 'Stored only on this computer, readable only by you', h('div.slider-wrap.wide', key))),
       h('div.btn-row', saveBtn, testBtn, note),
-      nameGroup,
-      voiceGroup,
       agentGroup,
-      scheduleGroup,
-      memoryGroup,
-      docsGroup,
       toolsGroup,
-      madeGroup,
-      expertGroup,
       skillsGroup,
-      extrasNote,
+      memoryGroup,
       group('Privacy', h('p.prose',
         'Simple requests like “open Firefox” or “volume 40” are handled on this computer. Other messages, and what Vara ',
         'reads while working (files, command output), go to the endpoint above; with a cloud provider they leave this computer, ',
-        'so don’t share passwords with Vara. Vara never opens SSH keys, saved passwords, browser data or its own API key. ',
-        'Vara Voice recognizes speech on this computer and listens only for “Hey Vera” until you say it.')),
+        'so don’t share passwords with Vara. Vara never opens SSH keys, saved passwords, browser data or its own API key.')),
     );
-    voiceGroup.hidden = true;
-    showExtras();
     load();
     loadAgent();
-    loadVoice();
-    return {
-      close: () => { offVoice(); offVoiceJob(); },
-      update: (_s, changed) => { if (changed.has('settings')) { showExtras(); loadVoice(); } },
-    };
+    return null;
   },
 
   // Settings > Poly Account: optional. Connect (sign in, a code, or a new account), sync, remote management.
-  polyaccount(page, store) {
+  polyaccount(page, store, opts = {}) {
     const err = h('div.error-text', { hidden: true });
     const body = h('div');
     let st = null;
@@ -1316,7 +1299,7 @@ const pages = {
     }
     function show(r) { st = r; errorText(err, ''); render(); }
     const offAccount = on('polyaccount', () => api.get('/api/polyaccount').then(show, fail));
-    page.append(pageHead('Poly Account', 'Optional: device management, recovery and sync.'), body);
+    page.append(opts.embedded ? '' : pageHead('Poly Account', 'Optional: device management, recovery and sync.'), body);
     api.get('/api/polyaccount').then(show, fail);
     return { close: () => offAccount() };
   },
@@ -1477,6 +1460,7 @@ export function mount(root, store) {
   store.subscribe((_st, changed) => { if (changed.has('settings')) syncNav(); });
 
   function go(id) {
+    if (id === 'polyaccount') id = 'account'; // one Account page now
     if (!pages[id]) id = PAGES[0][0];
     if (id === current) return;
     pageApi?.close?.();

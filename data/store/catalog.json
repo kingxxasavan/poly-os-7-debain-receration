@@ -58,9 +58,8 @@
         "firefox-esr",
         "firefox"
       ],
-      "system": true,
       "summary": "Fast, private web browser from Mozilla.",
-      "description": "Firefox ESR is the browser PolyOS ships with: tracking protection, sync across devices and thousands of add-ons."
+      "description": "Firefox ESR from Mozilla: tracking protection, sync across devices and thousands of add-ons."
     },
     {
       "id": "chromium",
@@ -84,10 +83,9 @@
       "id": "chrome",
       "name": "Google Chrome",
       "category": "browsers",
-      "source": "flathub",
-      "ref": "com.google.Chrome",
+      "source": "debian",
       "desktop": [
-        "com.google.Chrome.desktop"
+        "google-chrome.desktop"
       ],
       "icons": [
         "google-chrome",
@@ -95,10 +93,14 @@
       ],
       "featured": true,
       "summary": "Google's browser, with sign-in and sync.",
-      "description": "Sign in with your Google account to bring your bookmarks, passwords and extensions from your other computers.",
+      "description": "The browser PolyOS ships with. Sign in with your Google account to bring your bookmarks, passwords and extensions from your other computers.",
       "arches": [
         "amd64"
-      ]
+      ],
+      "packages": [
+        "google-chrome-stable"
+      ],
+      "system": true
     },
     {
       "id": "brave",

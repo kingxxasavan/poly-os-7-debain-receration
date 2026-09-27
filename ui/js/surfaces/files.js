@@ -1,16 +1,10 @@
 // Files: the PolyOS file manager (real filesystem through /api/files/*).
 
 import { api, on, params, withToken } from '../api.js';
-import { fill, formatBytes, h, icon } from '../ui.js';
+import { fileSvg, fill, formatBytes, h, icon } from '../ui.js';
 
 const TRASH = 'trash:///';
-const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp|svg)$/i;
-const KIND_STYLE = {
-  image: ['#4fb6a8', 'IMG'], video: ['#d9608f', 'VID'], audio: ['#9b7fe0', 'AUD'], text: ['#8a8f9c', 'TXT'],
-  code: ['#6fbf73', '</>'], pdf: ['#d95c5c', 'PDF'], archive: ['#b0875a', 'ZIP'], package: ['#b0875a', 'DEB'],
-  doc: ['#5b8def', 'DOC'], sheet: ['#3fa86b', 'XLS'], slides: ['#e0894f', 'PPT'], disc: ['#7c8595', 'ISO'],
-  font: ['#8a8f9c', 'Aa'], file: ['#7c8595', ''],
-};
+const IMAGE_EXT = /\.(png|jpe?g|jfif|gif|webp|avif|bmp|svg)$/i;
 const PLACE_ICONS = { home: 'home', desktop: 'monitor', documents: 'doc', download: 'download', music: 'music',
   pictures: 'image', videos: 'video', drive: 'drive', usb: 'drive' };
 
@@ -18,16 +12,6 @@ const PLACE_ICONS = { home: 'home', desktop: 'monitor', documents: 'doc', downlo
 function folderSvg() {
   return '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M6 16a5 5 0 0 1 5-5h14l6 6h22a5 5 0 0 1 5 5v4H6z" fill="#c9922e"/>'
     + '<rect x="6" y="21" width="52" height="33" rx="6" fill="#f0b848"/><rect x="6" y="21" width="52" height="6" rx="3" fill="#ffd27a" opacity=".55"/></svg>';
-}
-
-function fileSvg(kind, name) {
-  const [color, label] = KIND_STYLE[kind] || KIND_STYLE.file;
-  const ext = label || (name.includes('.') ? name.split('.').pop().slice(0, 4).toUpperCase() : '');
-  return '<svg viewBox="0 0 64 64" aria-hidden="true">'
-    + '<path d="M14 6h24l14 14v34a4 4 0 0 1-4 4H14a4 4 0 0 1-4-4V10a4 4 0 0 1 4-4z" fill="#eef0f5"/>'
-    + '<path d="M38 6l14 14H42a4 4 0 0 1-4-4z" fill="#c9ced9"/>'
-    + `<rect x="10" y="38" width="42" height="14" rx="3" fill="${color}"/>`
-    + `<text x="31" y="48.5" text-anchor="middle" font-family="Poppins,Inter,sans-serif" font-size="9" font-weight="700" fill="#fff">${ext.replace(/[<>&]/g, '')}</text></svg>`;
 }
 
 function entryIcon(entry, big) {
@@ -201,7 +185,7 @@ export function mount(root) {
       const btn = h('button.fx-place', { class: current === p ? 'active' : '', title: p === TRASH ? 'Trash' : p },
         ico(iconName), h('span', label), extra || null);
       btn.addEventListener('click', () => go(p));
-      btn.addEventListener('dragover', (e) => e.preventDefault());
+      dropTarget(btn, p);
       return btn;
     };
     sidebar.replaceChildren(...[
@@ -294,6 +278,11 @@ export function mount(root) {
 
   function bindItem(el, entry, index) {
     el.dataset.path = entry.path;
+    if (!inTrash() && renaming !== entry.path) {
+      el.draggable = true;
+      el.addEventListener('dragstart', (e) => dragStart(e, entry));
+      if (entry.dir) dropTarget(el, entry.path);
+    }
     el.classList.toggle('selected', selected.has(entry.path));
     el.classList.toggle('dim', entry.hidden || cutPaths().has(entry.path));
     el.addEventListener('click', (e) => { e.stopPropagation(); select(index, e); });
@@ -439,6 +428,52 @@ export function mount(root) {
     }
   }
 
+  // ---- drag and drop: move (Ctrl copies), onto folders, the places on the left, or the Trash ----
+  const DRAG_TYPE = 'application/x-polyos-paths';
+  function dragStart(e, entry) {
+    if (!selected.has(entry.path)) { selected = new Set([entry.path]); render(); }
+    const paths = selection().map((x) => x.path);
+    e.dataTransfer.effectAllowed = 'copyMove';
+    e.dataTransfer.setData(DRAG_TYPE, JSON.stringify(paths));
+    // other windows and apps understand plain file links
+    e.dataTransfer.setData('text/uri-list', paths.map((pth) => `file://${encodeURI(pth)}`).join('\r\n'));
+  }
+  function droppedPaths(e) {
+    const own = e.dataTransfer.getData(DRAG_TYPE);
+    if (own) { try { return JSON.parse(own); } catch { return []; } }
+    return (e.dataTransfer.getData('text/uri-list') || '').split(/\r?\n/)
+      .filter((u) => u.startsWith('file://')).map((u) => decodeURI(u.slice(7)));
+  }
+  function dropTarget(el, dest) {
+    el.addEventListener('dragover', (e) => {
+      if (![...e.dataTransfer.types].some((t) => t === DRAG_TYPE || t === 'text/uri-list')) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = dest === TRASH ? 'move' : e.ctrlKey ? 'copy' : 'move';
+      el.classList.add('drop-target');
+    });
+    el.addEventListener('dragleave', () => el.classList.remove('drop-target'));
+    el.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      el.classList.remove('drop-target');
+      const sources = droppedPaths(e).filter((pth) => pth !== dest && !dest.startsWith(`${pth}/`));
+      if (!sources.length) return;
+      try {
+        if (dest === TRASH) {
+          await api.post('/api/files/trash', { paths: sources });
+          showToast(`Moved ${sources.length} item${sources.length === 1 ? '' : 's'} to the Trash`);
+        } else {
+          const copy = e.ctrlKey;
+          await api.post(copy ? '/api/files/copy' : '/api/files/move', { sources, dest });
+          showToast(`${copy ? 'Copied' : 'Moved'} ${sources.length} item${sources.length === 1 ? '' : 's'}`);
+        }
+        await Promise.all([load(), loadPlaces()]);
+      } catch (err) {
+        showToast(err.message);
+      }
+    });
+  }
+
   async function trashSelected() {
     const items = selection();
     if (!items.length || inTrash()) return;
@@ -521,6 +556,15 @@ export function mount(root) {
     menu.style.top = `${Math.min(e.clientY, innerHeight - r.height - 8)}px`;
   }
 
+  async function setWallpaper(path, key) {
+    try {
+      await api.post('/api/settings', { [key]: path });
+      showToast(key === 'wallpaper' ? 'Wallpaper set' : 'Lock screen picture set');
+    } catch (err) {
+      showToast('That picture can’t be used. Try a JPG, PNG or WebP image.');
+    }
+  }
+
   function closeMenu() {
     menu?.remove();
     menu = null;
@@ -544,6 +588,9 @@ export function mount(root) {
       { icon: 'copy', label: 'Copy', hint: 'Ctrl+C', run: () => setClipboard('copy') },
       one && { icon: 'rename', label: 'Rename', hint: 'F2', run: () => { renaming = one.path; render(); } },
       one && { icon: 'copy', label: 'Copy path', run: () => copyText(one.path) },
+      one?.kind === 'image' && '-',
+      one?.kind === 'image' && { icon: 'image', label: 'Set as wallpaper', run: () => setWallpaper(one.path, 'wallpaper') },
+      one?.kind === 'image' && { icon: 'lock', label: 'Set as lock screen', run: () => setWallpaper(one.path, 'lockWallpaper') },
       '-',
       { icon: 'trash', label: 'Move to Trash', hint: 'Del', danger: true, run: trashSelected },
       one && '-',
@@ -649,6 +696,20 @@ export function mount(root) {
   });
 
   content.addEventListener('click', () => { selected = new Set(); renderStatus(); });
+  content.addEventListener('dragover', (e) => {
+    if (inTrash() || query || !listing?.writable) return;
+    if ([...e.dataTransfer.types].includes('text/uri-list')) e.preventDefault();
+  });
+  content.addEventListener('drop', async (e) => {
+    if (inTrash() || query || !listing?.writable || e.defaultPrevented) return;
+    e.preventDefault();
+    const sources = droppedPaths(e).filter((pth) => !pth.startsWith(`${current}/`) || pth.slice(current.length + 1).includes('/'));
+    if (!sources.length) return;
+    try {
+      await api.post(e.ctrlKey ? '/api/files/copy' : '/api/files/move', { sources, dest: current });
+      await load();
+    } catch (err) { showToast(err.message); }
+  });
   content.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     selected = new Set();

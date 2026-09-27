@@ -6,7 +6,7 @@
 
 import { withAdmin, watchJobs } from '../admin.js';
 import { api, launch, on, saveSettings, withToken } from '../api.js';
-import { VARA_PROVIDERS, packPanel, providerFor, wifiPanel } from '../components.js';
+import { packPanel, wifiPanel } from '../components.js';
 import { fill, formatBytes, h, hexToHue, hueToHex, icon, networkLabel, throttle } from '../ui.js';
 
 const GB = 1000 ** 3;
@@ -89,8 +89,6 @@ export function mount(root, store) {
     wipe: {}, roles: {}, // custom mode: drive -> what it's erased for; partition -> ROLES key
     user: { fullName: '', username: '', password: '' },
     appearance: { theme: store.state.settings.theme || 'dark', accent: store.state.settings.accent },
-    vara: false, // the Developer edition's question: Vara, the voice assistant, installed after PolyOS
-    varaConfig: null, // { provider, endpoint, model, apiKey } for Vara's AI, if given here
   };
   let probe = null;        // disks from /api/install/probe (fetched while the person fills in the rest)
   let probeError = null;
@@ -150,7 +148,8 @@ export function mount(root, store) {
   // ---- steps ---------------------------------------------------------------------------
   // Everything is asked on the USB drive, before installing, so the installed PolyOS starts straight
   // to the desktop: drivers and edition apps install by themselves after the restart (firststart.py).
-  const installSteps = [start, check, terms, edition, account, appearance, connect, polyAccount, target, installing];
+  // Poly Account comes before your account: signed in, your Poly Account can be how you sign in here too.
+  const installSteps = [start, check, terms, edition, connect, polyAccount, account, appearance, target, installing];
   // Only for a PolyOS installed some other way (the advanced installer): the same questions, once.
   const welcomeSteps = [check, connect, polyAccount, drivers, editionApps, done];
   const steps = live ? installSteps : welcomeSteps;
@@ -206,12 +205,7 @@ export function mount(root, store) {
     ];
   }
 
-  // The Developer edition asks one more thing: Vara, the voice and agent assistant ("vara" view),
-  // then its AI provider ("varaKey"). Everyone else goes straight on.
-  let editionView = 'pick';
   function edition() {
-    if (plan.edition === 'developer' && editionView === 'vara') return varaOffer();
-    if (plan.edition === 'developer' && editionView === 'varaKey') return varaKey();
     const cards = EDITIONS.map(([id, name, text, ico]) => h('button.su-edition', {
       class: plan.edition === id ? 'on' : '', role: 'radio', 'aria-checked': String(plan.edition === id),
       onclick: () => { plan.edition = id; go(step); },
@@ -221,65 +215,12 @@ export function mount(root, store) {
       h('div.su-editions', { role: 'radiogroup', 'aria-label': 'Edition' }, cards),
       plan.edition === 'regular' ? null : h('p.su-note', icon('info'),
         'Its apps download by themselves after installing, once you’re online.'),
-      nav(next('Next', () => {
-        if (plan.edition === 'developer') { editionView = 'vara'; go(step); } else { plan.vara = false; go(step + 1); }
-      })),
-    ];
-  }
-
-  // inside this step, Back goes to the step's previous screen
-  const subNav = (prev, ...right) => h('div.su-nav', h('button.su-back', { onclick: prev, title: 'Back' }, icon('chevronLeft'), 'Back'),
-    h('div.su-nav-right', ...right));
-
-  function varaOffer() {
-    const choose = (yes) => { plan.vara = yes; editionView = yes ? 'varaKey' : 'pick'; if (yes) go(step); else go(step + 1); };
-    return [
-      h('div.su-vara-head', h('img', { src: '/img/vara.png', alt: '' }),
-        h('div', ...head('Would you like Vara?', 'Our assistant, for the Developer edition: voice and agent, working for you around the clock.'))),
-      h('ul.su-bullets',
-        h('li', h('b', 'Talk to it: '), '“Hey Vera”, then ask. Vara answers out loud, and “stop” interrupts it.'),
-        h('li', h('b', 'It does things: '), 'drives your browser, opens apps, plays music, changes settings, searches the web and reads pages.'),
-        h('li', h('b', 'It remembers: '), 'what matters to you, plus reminders and routines that run on their own.'),
-        h('li', h('b', 'It builds: '), 'code, 3D models and robot projects with you, and asks before changing anything.')),
-      h('div.su-options',
-        option('Yes, set up Vara', 'Installs after PolyOS (about 300 MB, with its own web browser). Speech is recognized on this computer; it only listens for “Hey Vera”.',
-          h('span.su-dual', icon('mic')), () => choose(true)),
-        option('Not now', 'Vara stays a chat in the dock. Settings › Vara adds the voice any time.',
-          h('span.su-dual', icon('chat')), () => choose(false))),
-      subNav(() => { editionView = 'pick'; go(step); }),
-    ];
-  }
-
-  let varaProvider = VARA_PROVIDERS[0];
-  function varaKey() {
-    const key = h('input.su-input', { type: 'password', placeholder: 'Paste your API key', autocomplete: 'off', 'aria-label': 'API key',
-      value: plan.varaConfig?.apiKey || '' });
-    const label = h('span');
-    const hint = h('small');
-    const chips = h('div.su-chips', VARA_PROVIDERS.map((p) => h('button.su-chip', { onclick: () => pick(p) }, p.label)));
-    function pick(p) {
-      varaProvider = p;
-      label.textContent = `${p.label} API key`;
-      hint.textContent = `${p.keyHint} Other providers are in Settings › Vara.`;
-      chips.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.textContent === p.label));
-    }
-    pick(varaProvider);
-    const done = (withKey) => {
-      plan.varaConfig = withKey && key.value.trim() ? { provider: providerFor(varaProvider.endpoint), endpoint: varaProvider.endpoint,
-        model: varaProvider.model, apiKey: key.value.trim() } : null;
-      editionView = 'pick';
-      go(step + 1);
-    };
-    return [
-      ...head('Connect Vara’s brain', 'Vara thinks with the AI model you choose, using your own key. Simple things like “open Firefox” or “volume 40” work without one.'),
-      chips,
-      h('label.su-field.wide', label, key, hint),
-      subNav(() => { editionView = 'vara'; go(step); }, h('button.su-link', { onclick: () => done(false) }, 'Add it later'),
-        next('Next', () => done(true), { primary: true })),
+      nav(next()),
     ];
   }
 
   function account() {
+    if (plan.fromPoly) return accountFromPoly();
     const err = h('div.su-error', { hidden: true });
     const name = h('input.su-input', { value: plan.user.fullName, placeholder: 'Your name', autocomplete: 'name', autofocus: true, maxlength: 80 });
     const user = h('input.su-input', { value: plan.user.username, placeholder: 'username', autocomplete: 'username', spellcheck: 'false', maxlength: 32 });
@@ -331,6 +272,38 @@ export function mount(root, store) {
         field('Computer name', host),
         field('Time zone', zone)),
       blank, err,
+      nav(nextBtn),
+    ];
+  }
+
+  // Signing in with your Poly Account: only the username, the computer's name and the time zone to check.
+  function accountFromPoly() {
+    const err = h('div.su-error', { hidden: true });
+    const user = h('input.su-input', { value: plan.user.username, spellcheck: 'false', maxlength: 32, autofocus: true });
+    const host = h('input.su-input', { value: plan.hostname, placeholder: 'computer-name', spellcheck: 'false', maxlength: 63 });
+    const zone = h('select.su-input', timeZones().map((z) => h('option', { value: z, selected: z === plan.timezone }, z.replace(/_/g, ' '))));
+    user.addEventListener('input', () => {
+      user.value = user.value.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+      plan.user.username = user.value;
+      if (!hostnameEdited) host.value = plan.hostname = user.value ? `${user.value}-polyos` : '';
+    });
+    host.addEventListener('input', () => { hostnameEdited = true; host.value = host.value.toLowerCase().replace(/[^a-z0-9-]/g, ''); plan.hostname = host.value; });
+    zone.addEventListener('change', () => { plan.timezone = zone.value; });
+    const field = (label, input, hint) => h('label.su-field', h('span', label), input, hint ? h('small', hint) : null);
+    const nextBtn = next('Next', () => {
+      const problem = !/^[a-z_][a-z0-9_-]{0,31}$/.test(plan.user.username) ? 'Usernames start with a letter and use lowercase letters, numbers, - and _.'
+        : !/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(plan.hostname) ? 'Computer names use letters, numbers and hyphens.' : null;
+      if (problem) { err.textContent = problem; err.hidden = false; return; }
+      go(step + 1);
+    }, { primary: true });
+    return [
+      ...head(`You’ll sign in as ${plan.user.fullName.split(' ')[0] || 'you'}`, 'With your Poly Account password. You can add a PIN after installing, in Settings › Account.'),
+      h('div.su-form',
+        field('Username', user, 'For signing in. Lowercase, no spaces.'),
+        field('Computer name', host),
+        field('Time zone', zone)),
+      err,
+      h('div.su-foot', h('button.su-link', { onclick: () => { plan.fromPoly = false; plan.user.password = ''; go(step); } }, 'Use a different password instead')),
       nav(nextBtn),
     ];
   }
@@ -396,7 +369,7 @@ export function mount(root, store) {
         h('ul.su-reasons', reasons.length ? reasons : [h('li', 'No internal disk was found.')]),
         nav(erase ? h('span') : h('button.su-link', { onclick: () => { plan.mode = 'pick'; go(step); } }, 'Choose a partition or space'),
           erase ? null : next('Fresh install instead', () => { plan.mode = 'erase'; go(step); })),
-        erase ? null : bitlockerMessage()];
+        erase ? null : windowsAsleepMessage() || bitlockerMessage()];
     }
     if (!usable.some((d) => d.path === plan.disk)) {
       const internal = usable.filter((d) => !d.removable);
@@ -446,7 +419,7 @@ export function mount(root, store) {
     if (probe.uefi && probe.secureBoot) body.push(h('p.su-note', icon('lock'), 'Secure Boot is on. PolyOS supports it.'));
     // Made a partition for PolyOS in Windows (a D: drive, say)? Pick it on the drive screen instead.
     const pickInstead = erase ? h('span') : h('button.su-link', { onclick: () => { plan.mode = 'pick'; go(step); } }, 'Choose a partition instead (like a D: drive)');
-    return [...head(title, sub), ...body, nav(pickInstead, install), erase ? null : bitlockerMessage()];
+    return [...head(title, sub), ...body, nav(pickInstead, install), erase ? null : windowsAsleepMessage() || bitlockerMessage()];
   }
 
   // ---- "Where do you want to install PolyOS?": every drive's partitions and unallocated space,
@@ -576,7 +549,7 @@ export function mount(root, store) {
     const install = next('Next', () => sel && installHere(sel), { primary: true, disabled: !sel?.install?.possible });
     setTimeout(() => table.querySelector('.su-prow.on')?.scrollIntoView({ block: 'nearest' }), 0); // the chosen row stays in sight
     if (probe.uefi && probe.secureBoot) tools.append(h('span.su-psb', icon('lock'), 'Secure Boot is on. PolyOS supports it.'));
-    return [...head(title, sub), table, tools, form, status, nav(install), overlay || bitlockerMessage()];
+    return [...head(title, sub), table, tools, form, status, nav(install), overlay || windowsAsleepMessage() || bitlockerMessage()];
   }
 
   // The system message when a drive is encrypted with BitLocker: PolyOS can't go next to Windows
@@ -597,6 +570,25 @@ export function mount(root, store) {
           h('li', 'Start from this USB drive again and choose Dual boot.')),
         h('p', 'Installing PolyOS on a whole drive (erasing it) or on the encrypted partition itself still works.'),
         h('div.su-confirm-btns', h('button.su-next.primary', { onclick: () => { bitlockerSeen = true; go(step); } }, 'OK'))));
+  }
+
+  // Windows only asleep (Fast Startup): changing its drive would break its resume and loop it into
+  // Automatic Repair, so PolyOS waits until Windows is really shut down.
+  let asleepSeen = false;
+  function windowsAsleepMessage() {
+    if (!probe?.windowsAsleep?.length || asleepSeen) return null;
+    return h('div.su-confirm', { role: 'alertdialog', 'aria-label': 'Windows is asleep' },
+      h('div.su-confirm-box.su-sysmsg',
+        h('div.su-sysmsg-head', icon('moon'), h('b', 'Windows isn’t fully shut down')),
+        h('p', 'Windows was shut down with Fast Startup, which really puts it to sleep. If PolyOS changed its drive now, '
+          + 'Windows would wake up to a changed drive and get stuck in Automatic Repair. Shut it down fully first:'),
+        h('ol.su-steps',
+          h('li', 'Start Windows.'),
+          h('li', 'Open Control Panel › Power Options › Choose what the power buttons do › Change settings that are currently unavailable, and clear “Turn on fast startup”.'),
+          h('li', 'Shut down (or hold Shift while clicking Shut down).'),
+          h('li', 'Start from this USB drive again and choose Dual boot.')),
+        h('p', 'Installing PolyOS on a whole drive (erasing it) still works.'),
+        h('div.su-confirm-btns', h('button.su-next.primary', { onclick: () => { asleepSeen = true; go(step); } }, 'OK'))));
   }
 
   function askDelete(it) {
@@ -749,7 +741,6 @@ export function mount(root, store) {
   async function startInstall() {
     const payload = { mode: plan.mode, disk: plan.disk, hostname: plan.hostname, timezone: plan.timezone,
       user: plan.user, appearance: plan.appearance, edition: plan.edition,
-      vara: plan.edition === 'developer' && plan.vara, varaConfig: plan.edition === 'developer' && plan.vara ? plan.varaConfig : null,
       profile: profile || hardware?.profile || null, background: hardware?.background || null, drivers: recommended || [],
       ...(plan.mode === 'alongside' ? { size: plan.size } : {}),
       ...(plan.mode === 'custom' ? customLayout() : {}),
@@ -840,7 +831,7 @@ export function mount(root, store) {
   }
 
   // Poly Account: optional. Connect to Poly services (sign in, create an account, or a code), or
-  // use PolyOS locally; either way nothing else changes, and Settings › Poly Account can switch later.
+  // use PolyOS locally; either way nothing else changes, and Settings › Account can switch later.
   let pa = { view: 'choose', status: null, countries: null };
   function polyAccount() {
     const field = (label, input, hint) => h('label.su-field', h('span', label), input, hint ? h('small', hint) : null);
@@ -860,7 +851,7 @@ export function mount(root, store) {
     const offline = !store.state.system.network.kind || store.state.system.network.kind === 'none';
     if (pa.view === 'choose' && offline) {
       return [...head('Connect to Poly services?', 'Optional. PolyOS works just the same without an account.'),
-        h('div.su-status', icon('wifiOff'), h('span', 'You’re offline, so PolyOS will be set up to use locally. You can connect a Poly Account any time in Settings › Poly Account.')),
+        h('div.su-status', icon('wifiOff'), h('span', 'You’re offline, so PolyOS will be set up to use locally. You can connect a Poly Account any time in Settings › Account.')),
         nav(h('span'), next('Next', () => go(step + 1), { primary: true }))];
     }
     if (pa.view === 'choose') {
@@ -875,7 +866,7 @@ export function mount(root, store) {
       return [...head('You’re using PolyOS locally', 'No online account needed, and nothing will nag you about one.'),
         h('ul.su-bullets', h('li', 'PolyOS updates itself from Settings › Updates; no account needed.'),
           h('li', `Or download the newest version any time from ${site() || 'the PolyOS website'}/download.`),
-          h('li', 'Want an account later? Settings › Poly Account.')),
+          h('li', 'Want an account later? Settings › Account.')),
         paNav(() => view('choose'), next('Continue', () => go(step + 1), { primary: true }))];
     }
     if (pa.view === 'have') {
@@ -893,7 +884,11 @@ export function mount(root, store) {
       const btn = next('Sign in', null, { primary: true });
       btn.addEventListener('click', async () => {
         btn.disabled = true;
-        try { refresh(await api.post('/api/polyaccount/signin', { email: email.value, password: password.value })); } catch (x) { fail(x); btn.disabled = false; }
+        try {
+          const r = await api.post('/api/polyaccount/signin', { email: email.value, password: password.value });
+          pa.password = password.value; // only in memory: offered as this computer's password next
+          refresh(r);
+        } catch (x) { fail(x); btn.disabled = false; }
       });
       return [...head('Sign in to Poly', 'Your password connects this computer once. PolyOS doesn’t keep it.'),
         h('div.su-form.one', field('Email', email), field('Password', password)), err,
@@ -936,6 +931,7 @@ export function mount(root, store) {
         btn.disabled = true;
         try {
           const r = await api.post('/api/polyaccount/register', { name: name.value, email: email.value, password: password.value, country: country.value, acceptTerms: true });
+          pa.password = password.value;
           refresh(r);
         } catch (x) { fail(x); btn.disabled = false; }
       });
@@ -947,10 +943,29 @@ export function mount(root, store) {
     }
     // connected
     const a = pa.status.account || {};
+    if (live && a.name && !plan.user.fullName) plan.user.fullName = a.name; // the account screen starts with your name
+    if (live && pa.password) {
+      // Like a Microsoft account on Windows: sign in to this computer as you, with the same password.
+      const useIt = () => {
+        plan.user = { fullName: a.name || plan.user.fullName, username: plan.user.username || usernameFrom(a.name || 'user'),
+          password: pa.password };
+        if (!hostnameEdited) plan.hostname = `${plan.user.username}-polyos`;
+        plan.fromPoly = true;
+        go(step + 1);
+      };
+      return [...head(`Connected, ${(a.name || '').split(' ')[0] || 'welcome'}`, `This computer is part of ${a.email || 'your Poly Account'}.`),
+        h('div.su-options',
+          option('Use this account to sign in', `Sign in to this computer as ${a.name || 'you'}, with your Poly Account password. Your settings sync from your other computers.`,
+            h('span.su-dual', icon('user')), useIt),
+          option('Set up a separate account for this computer', 'A different name or password here. Poly Sync still works.',
+            h('span.su-dual', icon('plus')), () => { plan.fromPoly = false; go(step + 1); })),
+        h('p.su-note', icon('info'), `Manage this computer at ${site()}/account. Remote management stays off until you turn it on in Settings › Account.`),
+        nav(h('span'))];
+    }
     return [...head(`Connected, ${(a.name || '').split(' ')[0] || 'welcome'}`, `This computer is part of ${a.email || 'your Poly Account'}.`),
       h('ul.su-bullets', live ? h('li', 'It stays connected after PolyOS is installed.') : null,
         h('li', `Manage it at ${site()}/account.`), h('li', 'Poly Sync keeps your settings the same on your computers.'),
-        h('li', 'Remote management stays off until you turn it on in Settings › Poly Account.')),
+        h('li', 'Remote management stays off until you turn it on in Settings › Account.')),
       nav(next('Next', () => go(step + 1), { primary: true }))];
   }
 

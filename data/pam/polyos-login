@@ -1,0 +1,14 @@
+#%PAM-1.0
+# PolyOS sign-in screen (LightDM's pam-service, see lightdm.conf.d/50-polyos.conf): your PIN if you
+# set one in Settings > Account (polyos-pin checks it as root and counts wrong tries), otherwise
+# your password. Only the sign-in and lock screens take a PIN; sudo, pkexec and everything that
+# changes the system use Debian's own services, which ask for the password.
+auth     requisite                       pam_nologin.so
+auth     [success=done default=ignore]   pam_exec.so quiet expose_authtok /usr/libexec/polyos/polyos-pin check
+auth     [success=1 default=ignore]      pam_unix.so nullok try_first_pass
+auth     requisite                       pam_deny.so
+auth     required                        pam_permit.so
+-auth    optional                        pam_gnome_keyring.so
+account  include                         lightdm
+session  include                         lightdm
+password include                         lightdm

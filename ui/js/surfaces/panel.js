@@ -1,4 +1,4 @@
-// Floating dock: Start (pinwheel) · pinned/running apps · status, clock and the app launcher.
+// Floating dock: Start (pinwheel) · pinned/running apps · ^ (running apps) · status and clock.
 
 import { api, launch, on, windowAction, withToken } from '../api.js';
 import { clockTicker, fill, fmtTime, h, icon, networkIcon, networkLabel, volumeIcon } from '../ui.js';
@@ -36,7 +36,8 @@ export function mount(root, store) {
   const tasks = h('div.tasks', { role: 'toolbar', 'aria-label': 'Apps' });
   const status = h('button.dbtn.tray', { 'aria-label': 'Quick settings' });
   const clock = h('button.dbtn.clock', { 'aria-label': 'Calendar' });
-  const apps = h('button.dbtn.apps-btn', { title: 'All apps', 'aria-label': 'All apps' }, icon('apps'));
+  // ^ like Windows: what's running, including apps that live in the background (Steam, Discord)
+  const overflow = h('button.dbtn.overflow-btn', { title: 'Show running apps', 'aria-label': 'Show running apps' }, icon('chevronUp'));
   // Weather and the widgets board, like the left end of the Windows 11 taskbar
   const weather = h('button.dbtn.weather-btn', { title: 'Widgets (Win+W)', 'aria-label': 'Widgets' }, icon('widgets'));
   weather.addEventListener('click', () => openPopup('widgets', weather));
@@ -49,17 +50,26 @@ export function mount(root, store) {
   loadWeather();
   setInterval(loadWeather, 15 * 60000);
   on('widgets', (e) => { if (e.keys.includes('weather')) loadWeather(); });
-  start.addEventListener('click', () => openPopup('start', start));
+  // The Start menu opens over the middle of a centered taskbar, like Windows 11 (at the left when the icons are)
+  start.addEventListener('click', () => (store.state.settings.taskbarAlign === 'left' ? openPopup('start', start)
+    : api.post('/api/popup', { view: 'start' }).catch((err) => console.warn(err.message))));
   status.addEventListener('click', () => openPopup('quick', status));
   clock.addEventListener('click', () => openPopup('calendar', clock));
-  apps.addEventListener('click', () => openPopup('launcher', apps));
+  overflow.addEventListener('click', async () => {
+    let background = [];
+    try { background = (await api.get('/api/background-apps')).apps; } catch { /* only the windows, then */ }
+    const running = new Set(store.state.windows.map((w) => w.appId || `x${w.xid}`)).size;
+    const rows = Math.max(1, running + background.length);
+    const height = Math.min(520, 112 + rows * 52 + (running && background.length ? 34 : 0));
+    openPopup('tray', overflow, { data: { background }, height });
+  });
   root.append(
     h('div.dock-left', start, weather),
     h('div.dock-center', tasks),
-    h('div.dock-right', status, clock, h('div.dock-sep'), apps),
+    h('div.dock-right', overflow, status, clock),
   );
 
-  const popupButtons = { start, quick: status, calendar: clock, launcher: apps, widgets: weather };
+  const popupButtons = { start, quick: status, calendar: clock, widgets: weather, tray: overflow };
   const markPopup = (popup) => {
     for (const [view, btn] of Object.entries(popupButtons)) btn.classList.toggle('open', popup?.view === view);
   };

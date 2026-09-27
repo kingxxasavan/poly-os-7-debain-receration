@@ -78,7 +78,10 @@ export function mountAuth(root, store, adapter) {
     const others = adapter.kind === 'login' && info ? info.users : [];
     const nameInput = !user ? h('input.gr-input.gr-name-input', { placeholder: 'Username', autocomplete: 'username', value: typedUser, 'aria-label': 'Username' }) : null;
     nameInput?.addEventListener('input', () => { typedUser = nameInput.value; });
-    const input = h('input.gr-input', { type: 'password', placeholder: 'Password', autocomplete: 'current-password', 'aria-label': 'Password', disabled: busy });
+    // a PIN set in Settings > Account works here too (the password always does)
+    const pinToo = !!user?.pin;
+    const input = h('input.gr-input', { type: 'password', placeholder: pinToo ? 'PIN or password' : 'Password',
+      autocomplete: 'current-password', 'aria-label': pinToo ? 'PIN or password' : 'Password', disabled: busy });
     const next = h('button.gr-pill.primary', { disabled: busy }, busy ? h('span.gr-spinner') : 'Next');
     const submit = () => signIn(input.value);
     input.addEventListener('keydown', (e) => {
@@ -96,7 +99,7 @@ export function mountAuth(root, store, adapter) {
         : null,
       h('div.gr-avatar', user ? initials(user) : icon('user')),
       h('h1.gr-name', title),
-      h('p.gr-prompt', 'Enter your password'),
+      h('p.gr-prompt', pinToo ? 'Enter your PIN or password' : 'Enter your password'),
       notice ? h('div.gr-notice', { role: 'status' }, icon('check'), h('span', notice)) : null,
       error ? h('div.gr-error', { role: 'alert' }, h('b', 'Incorrect Password'), h('span', error),
         h('small', 'Forgot your password? No worries. Click Forgot Password below to get help.')) : null,

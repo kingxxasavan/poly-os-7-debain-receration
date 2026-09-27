@@ -88,7 +88,7 @@ class StoreTests(unittest.TestCase):
         data = store.load()
         apps = store.validate(data)
         self.assertGreater(len(apps), 25)
-        self.assertTrue(apps["firefox"]["system"])
+        self.assertTrue(apps["chrome"]["system"])
         self.assertEqual(apps["discord"]["source"], "flathub")
         for app in apps.values():
             self.assertTrue(app["icons"], app["id"])
@@ -1121,66 +1121,6 @@ class FirstStartTests(unittest.TestCase):
             self.assertIsNone(be.first_start_notice(seen))
 
 
-class VaraVoiceInstallTests(unittest.TestCase):
-    """polyos-admin vara-voice install: packages, the speech engine, the model and the voice."""
-
-    def test_install_lays_out_models(self):
-        import zipfile
-        from polyos import vara_voice
-        with tempfile.TemporaryDirectory() as tmp:
-            home = Path(tmp) / "vara-voice"
-            (home / "bin").mkdir(parents=True)
-            (home / "bin" / "python3").write_text("")  # the venv already exists
-            ran = []
-
-            def fake_download(url, dest, start, span, what):
-                if url.endswith(".zip"):
-                    with zipfile.ZipFile(dest, "w") as zf:
-                        zf.writestr("vosk-model-small-en-us-0.15/conf/model.conf", "x")
-                        zf.writestr("vosk-model-small-en-us-0.15/am/final.mdl", "x")
-                else:
-                    dest.write_text("voice")
-
-            def fake_run(args, **kw):
-                ran.append(args[:3])
-                return mock.Mock(returncode=0, stdout="", stderr="")
-
-            events = []
-            with mock.patch.object(vara_voice, "VOICE_HOME", home), \
-                    mock.patch.object(vara_voice, "VOSK_MODEL", home / "models" / "vosk"), \
-                    mock.patch.object(vara_voice, "PIPER_VOICE", home / "models" / "piper" / "voice.onnx"), \
-                    mock.patch.object(admin, "apt_update"), mock.patch.object(admin, "has_candidate", return_value=True), \
-                    mock.patch.object(admin, "apt") as apt, mock.patch.object(admin, "_download", fake_download), \
-                    mock.patch.object(admin.subprocess, "run", fake_run), mock.patch.object(admin, "emit", events.append):
-                admin.vara_voice("install")
-                self.assertTrue((home / "models" / "vosk" / "conf" / "model.conf").exists())
-                self.assertTrue((home / "models" / "piper" / "voice.onnx").exists())
-                self.assertTrue((home / "models" / "piper" / "voice.onnx.json").exists())
-                self.assertIn("espeak-ng", apt.call_args[0][0])
-                self.assertTrue(any("pip" in a for a in ran))
-                self.assertIn("Hey Vera", events[-1]["message"])
-                admin.vara_voice("remove")
-                self.assertFalse(home.exists())
-
-    def test_first_start_installs_vara_when_chosen(self):
-        from polyos import drivers, firststart, installer
-        plan = installer.validate_plan({"mode": "erase", "disk": "/dev/sda", "edition": "developer", "vara": True,
-                                        "user": {"username": "dev", "password": ""}})
-        self.assertTrue(plan["firstStart"]["vara"])
-        self.assertTrue(plan["extraSettings"]["varaVoice"])
-        regular = installer.validate_plan({"mode": "erase", "disk": "/dev/sda", "vara": True, "user": {"username": "a"}})
-        self.assertFalse(regular["firstStart"]["vara"])  # only offered with the Developer edition
-        self.assertNotIn("varaVoice", regular["extraSettings"])
-        with tempfile.TemporaryDirectory() as tmp:
-            p, st = Path(tmp) / "plan.json", Path(tmp) / "st.json"
-            p.write_text(json.dumps(firststart.clean_plan([], None, drivers.DRIVER_PACKAGE_RE, vara=True)))
-            voice = mock.Mock()
-            out = firststart.run(lambda e: None, mock.Mock(), mock.Mock(), lambda: True, p, st, install_voice=voice)
-            voice.assert_called_once()
-            self.assertEqual(out["state"], "done")
-            self.assertTrue(out["varaDone"])
-
-
 class BrokenPackageTests(unittest.TestCase):
     """An update stopped by some other half-installed package: repaired and retried, or named."""
 
@@ -1227,3 +1167,178 @@ class BrokenPackageTests(unittest.TestCase):
         out = "ii  bash\niF  docker.io\niU  libfoo\nrc  oldpkg\nii  polyos-shell\n"
         with mock.patch.object(admin.subprocess, "run", return_value=mock.Mock(stdout=out.replace("  ", " "))):
             self.assertEqual(admin.half_installed(), ["docker.io", "libfoo"])
+
+
+class JobQueueTests(unittest.TestCase):
+    """PolyMarket: installs asked for while another runs wait their turn, then run by themselves."""
+
+    def test_queued_jobs_run_in_order(self):
+        import threading
+        import time as _time
+
+        from polyos.core import EventBus
+        from polyos.privileged import Jobs
+
+        jobs = Jobs(EventBus())
+        gate, ran = threading.Event(), []
+
+        def runner(name, wait=False):
+            def run(job, update):
+                if wait:
+                    gate.wait(5)
+                ran.append(name)
+                return 0
+            return run
+        first = jobs.start("store", "Installing A", [], target="a", runner=runner("a", wait=True), queue=True)
+        second = jobs.start("store", "Installing B", [], target="b", runner=runner("b"), queue=True)
+        third = jobs.start("store", "Installing C", [], target="c", runner=runner("c"), queue=True)
+        self.assertEqual((first["state"], second["state"], third["state"]), ("running", "queued", "queued"))
+        self.assertEqual(jobs.start("store", "Installing B", [], target="b", runner=runner("b"), queue=True)["id"], second["id"])
+        self.assertEqual(jobs.cancel(third["id"])["state"], "cancelled")
+        with self.assertRaises(ApiError):  # without queue, still one at a time
+            jobs.start("drivers", "Installing drivers", [], runner=runner("d"))
+        gate.set()
+        for _ in range(100):
+            if {j["target"]: j["state"] for j in jobs.list()}.get("b") == "done":
+                break
+            _time.sleep(0.05)
+        self.assertEqual(ran, ["a", "b"])
+
+
+class PinTests(unittest.TestCase):
+    """PIN sign-in: hashed, 4 to 6 digits, locked after 5 wrong tries, each session only its own."""
+
+    def test_pin_records_and_lockout(self):
+        from polyos import pin
+
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp) / "pin"
+            self.assertFalse(pin.status("sam", store)["set"])
+            for bad in ("123", "1234567", "12a4", "", None):
+                self.assertFalse(pin.valid(bad), bad)
+            pin.save("sam", pin.make_record("2468"), store)
+            self.assertNotIn("2468", (store / "sam").read_text())  # only a hash
+            self.assertEqual(oct((store / "sam").stat().st_mode & 0o777), "0o600")
+            self.assertTrue(pin.verify("sam", "2468", store))
+            with mock.patch.object(pin.time, "sleep"):
+                for _ in range(pin.MAX_FAILS):
+                    self.assertFalse(pin.verify("sam", "0000", store))
+            self.assertTrue(pin.status("sam", store)["blocked"])
+            self.assertFalse(pin.verify("sam", "2468", store))  # the password is needed now
+            pin.reset_fails("sam", store)
+            self.assertTrue(pin.verify("sam", "2468", store))
+            with self.assertRaises(ValueError):
+                pin.save("../etc/passwd", pin.make_record("1111"), store)
+
+    def test_service_answers_only_for_the_caller(self):
+        from polyos import pin
+
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp) / "pin"
+            pin.save("sam", pin.make_record("1357"), store)
+            self.assertTrue(pin.handle({"op": "verify", "pin": "1357"}, "sam", store)["ok"])
+            self.assertFalse(pin.handle({"op": "verify", "pin": "1357", "user": "sam"}, "eve", store)["ok"])
+            self.assertTrue(pin.handle({"op": "status", "user": "sam"}, "lightdm", store)["set"])  # the login screen
+            self.assertFalse(pin.handle({"op": "status", "user": "sam"}, "eve", store)["set"])  # others: their own only
+            self.assertFalse(pin.handle({"op": "verify", "pin": "1357"}, None, store)["ok"])
+
+    def test_pam_only_on_the_sign_in_screen(self):
+        text = (Path(__file__).resolve().parent.parent / "data/pam/polyos-login").read_text()
+        self.assertIn("polyos-pin check", text)
+        self.assertIn("try_first_pass", text)
+        self.assertNotIn("polyos-pin", (Path(__file__).resolve().parent.parent / "data/pam/polyos-lock").read_text())
+        conf = (Path(__file__).resolve().parent.parent / "data/lightdm/lightdm.conf.d/50-polyos.conf").read_text()
+        self.assertIn("pam-service=polyos-login", conf)
+
+
+class ScreenLayoutTests(unittest.TestCase):
+    """More than one screen: every connected screen comes on, arranged as chosen (Win+P)."""
+
+    XRANDR = """Screen 0: minimum 8 x 8, current 1920 x 1080, maximum 32767 x 32767
+eDP-1 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis) 344mm x 194mm
+   1920x1080     60.01*+  48.00
+   1280x720      60.00
+HDMI-1 connected (normal left inverted right x axis y axis)
+   2560x1440     59.95 +
+   1920x1080     60.00    50.00
+DP-2 disconnected 1920x1080+1920+0 (normal left inverted right x axis y axis) 0mm x 0mm
+"""
+
+    def test_modes(self):
+        from polyos import display
+        outs = display.parse_xrandr(self.XRANDR)
+        stale = display.still_on(self.XRANDR)
+        self.assertEqual(stale, ["DP-2"])
+        dup = display.layout_command(outs, "duplicate", {}, stale)
+        self.assertEqual(dup[:4], ["xrandr", "--output", "DP-2", "--off"])
+        self.assertIn("--same-as", dup)
+        self.assertEqual(dup[dup.index("HDMI-1") + 2], "1920x1080")  # the biggest size both can show
+        ext = display.layout_command(outs, "extend", {"HDMI-1": {"size": "1920x1080", "rate": 50}})
+        self.assertEqual(ext[ext.index("HDMI-1"):][:7], ["HDMI-1", "--mode", "1920x1080", "--rate", "50", "--right-of", "eDP-1"])
+        second = display.layout_command(outs, "second")
+        self.assertEqual(second[second.index("eDP-1") + 1], "--off")
+        self.assertIn("--primary", second[:second.index("eDP-1")])
+        # one screen left: it's always on, whatever the mode
+        one = display.layout_command(outs[:1], "second")
+        self.assertNotIn("--off", one)
+
+    def test_plugging_in_is_seen(self):
+        from polyos import display
+        with tempfile.TemporaryDirectory() as tmp:
+            for name, st in (("card0-eDP-1", "connected"), ("card0-HDMI-A-1", "disconnected")):
+                (Path(tmp) / name).mkdir()
+                (Path(tmp) / name / "status").write_text(st + "\n")
+            before = display.connectors(Path(tmp))
+            (Path(tmp) / "card0-HDMI-A-1" / "status").write_text("connected\n")
+            self.assertNotEqual(before, display.connectors(Path(tmp)))
+
+
+class DriverExtrasTests(unittest.TestCase):
+    """Driver Manager: the processor's microcode, every part listed, firmware from the maker (fwupd)."""
+
+    def test_core_devices(self):
+        from polyos import drivers
+        items = drivers.core_devices("model name\t: AMD Ryzen 7 5800U\nvendor_id\t: AuthenticAMD\n", "MemTotal:  8047000 kB\n",
+                                     [{"name": "nvme0n1", "model": "WD SN530 (NVMe drive)", "driver": "nvme"}], ["Built-in screen"], "amd64")
+        kinds = {i["kind"]: i for i in items}
+        self.assertEqual(kinds["cpu"]["packages"], ["amd64-microcode"])
+        self.assertEqual(kinds["memory"]["title"], "8 GB memory")
+        self.assertIn("storage", kinds)
+        self.assertIn("screen", kinds)
+        for it in items:
+            for p in it["packages"]:
+                self.assertTrue(drivers.DRIVER_PACKAGE_RE.match(p), p)
+        arm = drivers.core_devices("Hardware\t: BCM2835\n", "", [], [], "arm64")
+        self.assertEqual(arm[0]["packages"], [])
+
+    def test_fwupd_updates(self):
+        from polyos import drivers
+        text = json.dumps({"Devices": [{"Name": "System Firmware", "Vendor": "LENOVO", "Version": "1.20", "DeviceId": "abc",
+                                        "Releases": [{"Version": "1.25", "Summary": "UEFI", "Size": 100, "Urgency": "high"}]},
+                                       {"Name": "Touchpad", "Releases": []}]})
+        ups = drivers.parse_fwupd_updates(text)
+        self.assertEqual([(u["device"], u["current"], u["version"]) for u in ups], [("System Firmware", "1.20", "1.25")])
+        self.assertEqual(drivers.parse_fwupd_updates("No updates available"), [])
+
+
+
+class AdminPasswordTests(unittest.TestCase):
+    """The administrator password stays with PolyOS for a few minutes; sudo never caches it for others."""
+
+    def test_no_sudo_ticket(self):
+        from polyos import privileged
+
+        calls = []
+
+        def fake_run(argv, **kw):
+            calls.append(argv)
+            return mock.Mock(returncode=0 if argv[:2] == ["sudo", "-S"] else 1, stderr="", stdout="")
+        admin = privileged.Admin()
+        with mock.patch.object(privileged.subprocess, "run", fake_run):
+            self.assertFalse(admin.ready())
+            admin.authenticate("pw")
+            self.assertTrue(admin.ready())
+            admin.forget()
+            self.assertFalse(admin.ready())
+        self.assertTrue(all("-v" not in c for c in calls))  # never "validate" (which leaves a ticket)
+        self.assertTrue(all("-k" in c for c in calls))

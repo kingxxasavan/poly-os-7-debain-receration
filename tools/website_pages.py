@@ -165,7 +165,7 @@ page("download", "Download PolyOS 7", "Download the PolyOS 7 live USB and instal
     </section>""", scripts=("/assets/site.js",))
 
 # ---- Documentation ---------------------------------------------------------------------------
-SHORTCUTS = [("Win", "Home Menu"), ("Win + S", "All apps"), ("Win + A", "Quick settings"), ("Win + W", "Widgets"), ("Win + V", "Ask Vara"), ("Win + Shift + V", "Talk to Vara"), ("Win + J", "The assistant's HUD"),
+SHORTCUTS = [("Win", "Start"), ("Win + S", "Search in Start"), ("Win + A", "Quick settings"), ("Win + W", "Widgets"), ("Win + V", "Ask Vara"), ("Win + P", "Duplicate, extend or one screen"),
              ("Win + R", "Run"), ("Win + I", "Settings"), ("Win + E", "Files"), ("Win + T", "Terminal"), ("Win + B", "Browser"),
              ("Win + L", "Lock"), ("Win + D", "Show the desktop"), ("Win + F", "Full screen on and off"), ("Win + ↑", "Maximize"),
              ("Win + ← / →", "Snap left or right"), ("Ctrl + Shift + Esc", "Task Manager"), ("Alt + Tab", "Switch windows"), ("Print", "Screenshot")]
@@ -174,32 +174,46 @@ page("docs", "Documentation · PolyOS 7", "How to install, use and update PolyOS
     "Documentation", "Using PolyOS 7",
     'Everything from installing to updates. Stuck? See <a href="/support">Help &amp; Support</a>.', [
         ("Install", '<p>The <a href="/install">install guide</a> covers making the USB drive, starting from it, BitLocker, '
-                    'dual boot next to Windows (or on a D: drive you made), and what to do if something goes wrong.</p>'),
+                    'dual boot next to Windows (or on a D: drive you made), and what to do if something goes wrong.</p>'
+                    '<p><b>Dual boot:</b> shut Windows down fully first. With Fast Startup on, Windows is only asleep, and changing its '
+                    'drive then sends it into Automatic Repair; setup notices and tells you how to turn Fast Startup off. After installing, '
+                    'PolyOS starts straight away; hold Shift or press Esc while the computer starts for the boot menu, or use '
+                    'Start › Power › <b>Restart to Windows</b>.</p>'),
         ("First start", '<p>Setup happens once, on the USB drive, before PolyOS installs. It checks your computer first: the exact '
                         'model, processor, memory and graphics. Most computers get <b>Everything on</b>; older ones get <b>Smooth</b> or '
-                        '<b>Light</b>, which turn off blur and see-through glass. Then your edition, account, look, Wi-Fi and, if you like, a '
-                        '<a href="#poly-account">Poly Account</a>. After the restart you go straight to your desktop; the recommended '
+                        '<b>Light</b>, which turn off blur and see-through glass. Then your edition, Wi-Fi and, if you like, a '
+                        '<a href="#poly-account">Poly Account</a>: sign in and you can use it to sign in to this computer too, with the same '
+                        'name and password. Then your account (if you didn’t use your Poly Account) and your look. After the restart you go straight to your desktop; the recommended '
                         'drivers and your edition’s apps install in the background once you’re online, and a notification says when '
                         'they’re done.</p>'),
-        ("Settings", '<ul><li><b>Display</b>: resolution, refresh rate, orientation, main display, brightness and graphics.</li>'
+        ("Settings", '<ul><li><b>Display</b>: resolution, refresh rate, orientation and brightness; with a second screen, Duplicate, '
+                     'Extend or one screen (also Win+P), remembered and set up again whenever you plug it in.</li>'
                      '<li><b>Sound</b>: output and input devices, microphone level, and the full mixer for per-app volume and surround.</li>'
-                     '<li><b>Apps</b>: what starts when you sign in, and uninstall any app with a button.</li>'
-                     '<li><b>Power &amp; Performance</b>: power modes, the hardware check, Light mode and background activity.</li>'
-                     '<li><b>Updates</b>: automatic downloads, an install time, restart questions and the update channel.</li>'
-                     '<li><b>Poly Account</b>: connect, sync, remote management, or stay local.</li></ul>'),
+                     '<li><b>Account</b>: your Poly Account, and how you sign in: a 4 to 6 digit <b>PIN</b> for the sign-in and lock '
+                     'screens (installing and Terminal’s sudo still ask for the password), your password and a recovery key.</li>'
+                     '<li><b>Personalization</b>: wallpaper, colors, dark or light.</li>'
+                     '<li><b>Apps</b>: installed apps (uninstall with a button), startup apps, and usage: time in each app.</li>'
+                     '<li><b>Storage</b>: how full your drives are, what your folders take, and clearing the trash and caches.</li>'
+                     '<li><b>Power &amp; Performance</b>: power modes, what closing the lid and the power button do, the hardware check.</li>'
+                     '<li><b>Updates</b>: automatic downloads, an install time, restart questions and the update channel.</li></ul>'
+                     '<p><b>Quick settings</b> (the Wi-Fi, sound and battery icons): Wi-Fi, Airplane mode, Energy saver, Night light, '
+                     'Sound, brightness and volume.</p>'),
         ("Updates", '<p>PolyOS updates itself from <b>Settings › Updates</b> (and <b>About › Update now</b>), with or without an account. '
                     'Updates are signed: PolyOS checks every update’s signature and checksums before installing it. You choose whether '
                     'updates download and install automatically, at what time, and whether PolyOS asks before restarting. Channels: '
                     '<b>Stable</b> for most people, <b>Beta</b> and <b>Developer</b> for early versions. Some updates are for one '
-                    'edition only (like Vara’s for the Developer edition): PolyOS gets them only if this computer uses that edition '
-                    'or developer mode.</p>'
+                    'edition only: PolyOS gets them only if this computer uses that edition or developer mode. Google Chrome '
+                    'updates with the rest of the system.</p>'
                     '<p>If an update stops with “dpkg returned an error code (1)”, another package on the computer was left half '
                     'installed. PolyOS 1.2.2 and later repair that and try again by themselves, and name the package if it still '
                     'fails. On an older version, open Terminal and run <code>sudo dpkg --configure -a</code> then '
                     '<code>sudo apt-get -f install</code>, and install the update again. Details: <code>/var/log/polyos-update.log</code>.</p>'
                     '<p>Without internet, download the newest ISO from <a href="/download">the download page</a> and install over the old version.</p>'),
-        ("Drivers", '<p><b>Driver Manager</b> finds NVIDIA and AMD graphics, Wi-Fi (including Broadcom), Bluetooth, touchscreens and pens, '
-                    'webcams and the built-in cameras of newer Intel laptops, and installs what Debian has for them.</p>'),
+        ("Drivers", '<p><b>Driver Manager</b> shows your computer’s maker, model and firmware version, and every part: processor '
+                    '(with its microcode updates), memory, drives, screens, NVIDIA, AMD and Intel graphics, Wi-Fi (including Broadcom), '
+                    'Bluetooth, touchscreens and pens, and webcams. It installs what Debian has for them, and <b>firmware updates from '
+                    'your computer’s maker</b> (BIOS/UEFI, SSDs, docks) through the Linux Vendor Firmware Service, where Dell, Lenovo, '
+                    'HP and others publish them for Linux.</p>'),
         ("Poly Account", '<p>A Poly Account is optional. It adds device management, recovery, sync and account emails; PolyOS works fully without one.</p>'
                          '<ul><li><b>Connect a computer</b>: during setup, or Settings › Poly Account › Connect. Sign in there, or use the 6-digit code: '
                          'open <a href="/link">the link page</a> on any device and enter it.</li>'
@@ -208,19 +222,10 @@ page("docs", "Documentation · PolyOS 7", "How to install, use and update PolyOS
                          '<li><b>Recovery</b>: a verified email resets your password; so does a recovery key from <a href="/account#recovery">Poly Account › Recovery</a>.</li>'
                          '<li><b>Poly Sync</b> keeps settings, theme, wallpapers and pinned apps the same on your computers. Files aren’t synced.</li></ul>'),
         ("Keyboard shortcuts", f'<table class="guide-table"><thead><tr><th>Keys</th><th>What it does</th></tr></thead><tbody>{shortcut_rows}</tbody></table>'),
-        ("Vara", '<p>Vara is the PolyOS assistant and AI agent. In every edition it opens apps, reads and writes files, '
-                 'writes and runs code, makes 3D models and works with ROS 2 robots and Arduino boards, asking before it changes anything. '
-                 'Choose its provider (Ollama Cloud, OpenAI, NVIDIA or Claude) in Settings › Vara.</p>'
-                 '<p>With the <b>Developer edition</b> (or developer mode, in Settings › About) Vara also searches the web and drives its own '
-                 'browser, plays music, sets reminders and routines that run on their own, searches your documents, writes itself new tools, '
-                 'and gets the voice, the HUD and an expert helper:</p>'
-                 '<ul><li><b>Voice</b>: say “Hey Vera”, or give it a name of its own (Settings › Vara › Name; “Jarvis” answers to “Hey Jarvis”). '
-                 'Speech is recognized on your computer. Ask follow-ups without the name; say “stop” to interrupt. Offered when setting up the '
-                 'Developer edition, or install it from Settings › Vara › Voice.</li>'
-                 '<li><b>Its own browser</b>: a real browser window you can watch, where Vara reads pages, clicks, fills in forms and compares, asking before it acts on a page.</li>'
-                 '<li><b>Plans</b>: for bigger jobs Vara writes a checklist and ticks it off as it works, checking each step.</li>'
-                 '<li><b>The HUD</b>: a full-screen interface that opens when it hears its name, or with Win+J.</li>'
-                 '<li><b>Expert helper</b>: a second model (such as Claude) Vara asks for help with hard code.</li></ul>'),
+        ("Vara", '<p>Vara is the PolyOS assistant and AI agent. Ask it from Start or with Win+V: it opens apps, changes the '
+                 'volume, brightness and Wi-Fi, and writes and runs code, makes 3D models and works with ROS 2 robots and '
+                 'Arduino boards, asking before it changes anything. Choose its provider (Ollama Cloud, OpenAI, NVIDIA or '
+                 'Claude) in Settings › Vara.</p>'),
     ]), icons=("info",))
 
 # ---- Updates / changelog ----------------------------------------------------------------------

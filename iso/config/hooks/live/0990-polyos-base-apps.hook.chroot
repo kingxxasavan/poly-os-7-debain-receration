@@ -1,0 +1,8 @@
+#!/bin/sh
+# Every app this image ships, for the Start menu (polyos/backend.py BASE_APPS_FILE): of these only
+# the everyday ones are listed (Chrome, Files, Terminal, Text Editor, Calculator, Photos...), not
+# XTerm, screenshot and settings tools and other helpers. Apps installed later always show.
+set -e
+mkdir -p /usr/share/polyos
+ls /usr/share/applications | grep '\.desktop$' | sort > /usr/share/polyos/base-apps.txt
+wc -l /usr/share/polyos/base-apps.txt

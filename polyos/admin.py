@@ -7,7 +7,6 @@
     polyos-admin account FILE              for the sudo user: {"password"} and/or {"recoveryKey"} (file deleted)
     polyos-admin reboot                    restart right away (after installing, from the live USB)
     polyos-admin first-start               after installing: the drivers and edition apps setup chose (a timer runs it)
-    polyos-admin vara-voice install|remove Vara Voice: speech recognition and a voice for Vara (/opt/polyos/vara-voice)
     polyos-admin app remove DESKTOP_ID     Settings > Apps: uninstall the Debian package or Flatpak behind an app
     polyos-admin disk delete DISK NUMBER   the installer's drive screen: delete a partition (live USB only)
     polyos-admin disk new DISK START BYTES     ... or make one in unallocated space (START in sectors)
@@ -16,6 +15,10 @@
     polyos-admin update polyos|system      online updates: the newest PolyOS release, or Debian's updates
     polyos-admin auto-update timer|check|tonight|now   the update service (systemd runs these)
     polyos-admin update-policy JSON        Settings > Updates: automatic checks, downloads, installs, time, channel
+    polyos-admin power-keys LID PLUGGED BUTTON   what closing the lid (on battery / plugged in) and the power button do
+    polyos-admin clean-packages            Settings > Storage: delete apt's downloaded packages
+    polyos-admin restart-windows           start Windows next time only (grub-reboot), then restart
+    polyos-admin firmware                  install the firmware updates the computer's maker offers (fwupd, LVFS)
 
 Every command prints JSON lines: {"progress": 0..1, "message": "..."} while it works,
 {"result": ...} for data, and {"error": "..."} (exit status 1) when it fails.
@@ -366,6 +369,12 @@ def account(path: Path) -> None:
         path.unlink(missing_ok=True)
     password = request.get("password")
     key = request.get("recoveryKey")
+    if "pin" in request:  # Settings > Account > PIN: a new PIN, or None to remove it
+        from . import pin as pins
+        new_pin = request["pin"]
+        if new_pin is not None and not pins.valid(new_pin):
+            raise AdminError("A PIN is 4 to 6 digits.")
+        pins.save(user, pins.make_record(new_pin) if new_pin is not None else None)
     if password is not None:
         if not isinstance(password, str) or not password or len(password) > 256 or "\n" in password:
             raise AdminError("Choose a new password.")
@@ -439,85 +448,61 @@ def reboot() -> None:
         pass
 
 
-# Vara Voice: offline speech recognition (Vosk, a small English model) and a natural voice (Piper),
-# in their own Python environment, plus the tools Vara's browser and media control use.
-VOICE_PACKAGES = ["espeak-ng", "xdotool", "xclip", "playerctl", "pipewire-bin", "python3-venv", "poppler-utils",
-                  "chromium"]  # Debian's Chromium (with Debian's security updates) is the browser Vara drives
-BROWSER_PIP = ["playwright>=1.45,<2"]  # vara_browser.py: Vara's own web browser
-VOICE_PIP = ["vosk>=0.3.45,<0.4", "piper-tts>=1.3,<2"]
-VOSK_MODEL_URL = "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
-PIPER_VOICE_URL = "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx"
-
-
-def _download(url: str, dest: Path, start: float, span: float, what: str) -> None:
-    import urllib.request
-    tmp = dest.with_name(dest.name + ".part")
-    req = urllib.request.Request(url, headers={"User-Agent": "PolyOS-VaraVoice/1.0"})
-    with urllib.request.urlopen(req, timeout=60) as res, open(tmp, "wb") as out:  # noqa: S310 - https
-        total = int(res.headers.get("Content-Length") or 0)
-        got = 0
-        while chunk := res.read(1 << 20):
-            out.write(chunk)
-            got += len(chunk)
-            if total:
-                emit({"progress": start + span * got / total, "message": f"Downloading {what}… {got * 100 // total}%"})
-    os.replace(tmp, dest)
-
-
-def vara_voice(action: str) -> None:
-    """Install (or remove) Vara Voice and Vara's web browser. Downloads: about 300 MB."""
-    import urllib.error
-    import zipfile
-
-    from . import vara_voice as voice
-    home = voice.VOICE_HOME
-    if action == "remove":
-        shutil.rmtree(home, ignore_errors=True)
-        return emit({"progress": 1.0, "message": "Vara Voice is removed."})
-    if action != "install":
-        raise AdminError("Say install or remove.")
-    apt_update()
-    available = [p for p in VOICE_PACKAGES if has_candidate(p)]
-    if available:
-        apt(["install", *available], start=0.05)
-    emit({"progress": 0.25, "message": "Setting up Vara's speech engine…"})
-    home.mkdir(parents=True, exist_ok=True)
-    if not (home / "bin" / "python3").exists():
-        venv = subprocess.run([shutil.which("python3") or "/usr/bin/python3", "-m", "venv", str(home)],
-                              capture_output=True, text=True, timeout=300)
-        if venv.returncode != 0:
-            raise AdminError("Couldn't make Vara Voice's Python environment: " + venv.stderr.strip()[-300:])
-    pip = subprocess.run([str(home / "bin" / "python3"), "-m", "pip", "install", "--quiet", "--disable-pip-version-check",
-                          "--upgrade", *VOICE_PIP], capture_output=True, text=True, timeout=1800)
-    if pip.returncode != 0:
-        raise AdminError("Vara's speech engine didn't install: " + ((pip.stderr or pip.stdout).strip().splitlines() or ["pip failed"])[-1])
-    web = subprocess.run([str(home / "bin" / "python3"), "-m", "pip", "install", "--quiet", "--disable-pip-version-check",
-                          "--upgrade", *BROWSER_PIP], capture_output=True, text=True, timeout=1800)
-    if web.returncode != 0:  # the voice still works; Vara's web browser waits for the next try
-        emit({"log": "playwright didn't install: " + (web.stderr or web.stdout).strip()[-300:]})
-    models = home / "models"
+def power_keys(lid: str, plugged: str, button: str) -> None:
+    """Closing the lid and pressing the power button, through logind (it reloads its settings on SIGHUP)."""
+    from . import power as pw
     try:
-        if not (voice.VOSK_MODEL / "conf").is_dir():
-            models.mkdir(exist_ok=True)
-            archive = models / "vosk.zip"
-            _download(VOSK_MODEL_URL, archive, 0.45, 0.25, "the speech recognition model")
-            with zipfile.ZipFile(archive) as zf:
-                top = sorted({n.split("/", 1)[0] for n in zf.namelist() if n.strip("/")})
-                zf.extractall(models)  # zipfile drops ".." and absolute paths
-            archive.unlink()
-            shutil.rmtree(voice.VOSK_MODEL, ignore_errors=True)
-            (models / top[0]).rename(voice.VOSK_MODEL)
-        if not voice.PIPER_VOICE.exists():
-            voice.PIPER_VOICE.parent.mkdir(parents=True, exist_ok=True)
-            _download(PIPER_VOICE_URL + ".json", voice.PIPER_VOICE.with_suffix(".onnx.json"), 0.7, 0.02, "Vara's voice")
-            _download(PIPER_VOICE_URL, voice.PIPER_VOICE, 0.72, 0.23, "Vara's voice")
-    except (urllib.error.URLError, OSError, zipfile.BadZipFile, IndexError) as exc:
-        raise AdminError(f"A download for Vara Voice didn't finish ({getattr(exc, 'reason', exc)}). Try again.") from None
-    check = subprocess.run([str(home / "bin" / "python3"), "-c", "import vosk, piper"], capture_output=True, text=True, timeout=120)
-    if check.returncode != 0:
-        raise AdminError("Vara Voice installed, but its speech engine doesn't start: " + check.stderr.strip()[-300:])
-    subprocess.run(["chmod", "-R", "a+rX", str(home)], check=False)
-    emit({"progress": 1.0, "message": "Vara Voice is ready. Say “Hey Vera”."})
+        text = pw.logind_text(lid, plugged, button)
+    except ValueError as exc:
+        raise AdminError(str(exc)) from None
+    pw.LOGIND_CONF.parent.mkdir(parents=True, exist_ok=True)
+    pw.LOGIND_CONF.write_text(text)
+    subprocess.run(["systemctl", "kill", "-s", "HUP", "systemd-logind"], capture_output=True, timeout=30)
+    emit({"progress": 1.0, "message": "Saved."})
+
+
+def windows_entry(grub_cfg: str) -> str | None:
+    """The boot menu's Windows entry (os-prober's), by its title."""
+    m = re.search(r"^menuentry\s+'([^']*Windows[^']*)'", grub_cfg, re.M)
+    return m.group(1) if m else None
+
+
+def restart_windows() -> None:
+    try:
+        entry = windows_entry(Path("/boot/grub/grub.cfg").read_text("utf-8", errors="replace"))
+    except OSError:
+        entry = None
+    if not entry:
+        raise AdminError("Windows isn't in the boot menu.")
+    proc = subprocess.run(["grub-reboot", entry], capture_output=True, text=True, timeout=60)
+    if proc.returncode != 0:
+        raise AdminError("Couldn't choose Windows for the next start.")
+    emit({"progress": 1.0, "message": "Restarting into Windows…"})
+    subprocess.run(["systemctl", "reboot"], capture_output=True, timeout=60)
+
+
+def firmware() -> None:
+    """Firmware updates from the computer's maker (BIOS/UEFI, SSD, docks...), through fwupd and LVFS.
+    Most apply while the computer restarts."""
+    if not shutil.which("fwupdmgr"):
+        apt_update()
+        apt(["install", "fwupd"], start=0.05)
+    emit({"progress": 0.2, "message": "Getting the newest firmware list from your computer's maker…"})
+    subprocess.run(["fwupdmgr", "refresh", "--force", "--assume-yes"], capture_output=True, text=True, timeout=300)
+    emit({"progress": 0.35, "message": "Installing firmware updates… Keep the computer plugged in."})
+    proc = subprocess.run(["fwupdmgr", "update", "--assume-yes", "--no-reboot-check", "--no-unreported-check"],
+                          capture_output=True, text=True, timeout=3600)
+    text = (proc.stdout + proc.stderr).strip()
+    if proc.returncode not in (0, 2):  # 2: nothing to do
+        raise AdminError(text.splitlines()[-1] if text else "The firmware update didn't finish.")
+    emit({"progress": 1.0, "message": "Firmware updated. Restart to finish." if proc.returncode == 0 else "No firmware updates.",
+          "restart": proc.returncode == 0})
+
+
+def clean_packages() -> None:
+    before = sum(f.stat().st_size for f in Path("/var/cache/apt/archives").glob("*.deb"))
+    subprocess.run(["apt-get", "clean"], capture_output=True, timeout=300)
+    emit({"progress": 1.0, "message": f"Freed {before // (1024 * 1024)} MB.", "result": {"freed": before}})
 
 
 def first_start() -> None:
@@ -545,7 +530,7 @@ def first_start() -> None:
         if ids:
             pack_install(name, ids)
 
-    firststart.run(emit, drivers_install, install_pack, online, install_voice=lambda: vara_voice("install"))
+    firststart.run(emit, drivers_install, install_pack, online)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -579,8 +564,6 @@ def main(argv: list[str] | None = None) -> int:
             reboot()
         elif cmd == "first-start":
             first_start()
-        elif cmd == "vara-voice" and len(rest) == 1:
-            vara_voice(rest[0])
         elif cmd == "app" and len(rest) == 2 and rest[0] == "remove":
             app_remove(rest[1])
         elif cmd == "disk" and rest[:1] in (["delete"], ["new"]):
@@ -605,6 +588,14 @@ def main(argv: list[str] | None = None) -> int:
             auto_update(rest[0])
         elif cmd == "update-policy" and len(rest) == 1:
             update_policy(rest[0])
+        elif cmd == "power-keys" and len(rest) == 3:
+            power_keys(*rest)
+        elif cmd == "clean-packages":
+            clean_packages()
+        elif cmd == "restart-windows":
+            restart_windows()
+        elif cmd == "firmware":
+            firmware()
         elif cmd == "security" and len(rest) == 2:
             security(rest[0], rest[1])
         else:

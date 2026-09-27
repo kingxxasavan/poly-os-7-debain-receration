@@ -61,7 +61,7 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("start-menu", help="toggle the Start menu")
     p = sub.add_parser("popup", help="toggle a shell popup")
-    p.add_argument("view", choices=["start", "launcher", "quick", "calendar", "run", "power", "vara", "quickmenu", "widgets"])
+    p.add_argument("view", choices=["start", "launcher", "quick", "calendar", "run", "power", "vara", "quickmenu", "widgets", "project"])
     p = sub.add_parser("open", help="open a built-in app")
     p.add_argument("app", choices=["settings", "files", "setup", "taskmgr", "drivers", "store", "camera"])
     p.add_argument("page", nargs="?", help="Settings page, or the folder/URI for Files")
@@ -77,8 +77,6 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("status", help="print the shell state as JSON")
     p = sub.add_parser("cloud", help="open a cloud gaming service (geforcenow, xcloud, luna, boosteroid)")
     p.add_argument("service")
-    p = sub.add_parser("vara", help="Vara Voice: listen now (push to talk)")
-    p.add_argument("action", choices=["listen", "hud"])
     p = sub.add_parser("dev", help="developer mode: on | off (off also rescues a broken interface)")
     p.add_argument("state", choices=["on", "off"])
     args = parser.parse_args(argv)
@@ -98,20 +96,10 @@ def main(argv: list[str] | None = None) -> int:
             if args.state == "off":
                 call("POST", "/api/shell/restart", {})
             return 0
-        if args.command == "start-menu":  # the Windows key: open the Home Menu, or close any open menu
+        if args.command == "start-menu":  # the Windows key: open Start, or close any open menu
             call("POST", "/api/popup", {"view": "start", "toggle": True})
         elif args.command == "popup":
             call("POST", "/api/popup", {"view": args.view})
-        elif args.command == "vara" and args.action == "hud":
-            try:
-                call("POST", "/api/hud", {"open": True})
-            except SystemExit:  # not the Developer edition: the Vara chat instead
-                call("POST", "/api/popup", {"view": "vara"})
-        elif args.command == "vara":
-            try:
-                call("POST", "/api/vara/voice/listen", {})
-            except SystemExit:  # Vara Voice is off: open the Vara chat instead
-                call("POST", "/api/popup", {"view": "vara"})
         elif args.command == "open":
             page = args.page
             if page and page.startswith("file://"):  # .desktop %U hands us URIs

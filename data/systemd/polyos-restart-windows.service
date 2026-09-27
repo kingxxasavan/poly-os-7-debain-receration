@@ -1,0 +1,7 @@
+[Unit]
+Description=Restart into Windows (once)
+Documentation=file:///usr/lib/polyos/polyos/admin.py
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/polyos/polyos-admin restart-windows

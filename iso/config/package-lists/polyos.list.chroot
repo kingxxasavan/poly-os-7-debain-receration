@@ -40,6 +40,8 @@ grub-efi-arm64-signed
 pciutils
 usbutils
 isenkram-cli
+# firmware updates from the computer's maker (LVFS)
+fwupd
 flatpak
 #if ARCHITECTURES amd64
 nvidia-detect

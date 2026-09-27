@@ -1,0 +1,9 @@
+[Unit]
+Description=PolyOS PIN sign-in (lock screen)
+
+[Socket]
+ListenStream=/run/polyos-pin.sock
+SocketMode=0666
+
+[Install]
+WantedBy=sockets.target

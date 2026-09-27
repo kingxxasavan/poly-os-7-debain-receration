@@ -32,6 +32,8 @@ IMAGE_TYPES = {
     ".webp": "image/webp",
     ".gif": "image/gif",
     ".bmp": "image/bmp",
+    ".jfif": "image/jpeg",  # how Chrome often saves JPEGs from the web
+    ".avif": "image/avif",
 }
 
 DEFAULTS: dict = {
@@ -42,24 +44,34 @@ DEFAULTS: dict = {
     "clock24h": False,
     "showSeconds": False,
     "desktopClock": False,
-    "desktopIcons": ["polyos-files.desktop", "firefox-esr.desktop", "polyos-store.desktop"],  # shortcuts on the wallpaper
+    "desktopIcons": ["polyos-files.desktop", "google-chrome.desktop", "chromium.desktop", "polyos-store.desktop"],  # shortcuts on the wallpaper
     "cloudGaming": [],  # cloud gaming services shown in your apps (gaming.py)
     "displays": {},  # each screen's resolution, refresh rate, orientation (display.py), applied at start
+    "displayMode": "duplicate",  # with a second screen: "duplicate" | "extend" | "main" | "second" (Win+P)
     "desktopOpen": "double",  # "double" | "single": clicks to open a desktop shortcut
+    # Google Chrome is the browser (Chromium on ARM computers, which Chrome isn't made for); only
+    # installed apps show, so each computer shows the one it has
     "pinned": [
-        "firefox-esr.desktop",
+        "google-chrome.desktop",
+        "chromium.desktop",
         "polyos-files.desktop",
         "polyos-store.desktop",
         "xfce4-terminal.desktop",
         "org.xfce.mousepad.desktop",
         "polyos-settings.desktop",
     ],
+    # the Start menu's Pinned grid (only installed apps show), separate from the taskbar's
+    "startPinned": [
+        "google-chrome.desktop", "chromium.desktop", "polyos-files.desktop", "polyos-settings.desktop", "polyos-store.desktop",
+        "org.xfce.mousepad.desktop", "xfce4-terminal.desktop", "org.gnome.Calculator.desktop", "org.xfce.ristretto.desktop",
+        "org.gnome.Evince.desktop", "polyos-taskmgr.desktop", "polyos-camera.desktop", "polyos-install.desktop",
+    ],
     "setupDone": False,  # first-run setup ("It's time to get started") finished
     "recent": [],  # most recently opened apps, newest first (Start menu)
     "effects": True,  # compositor: blur, shadows, rounded corners (next sign-in)
     "glass": 78,  # opacity of the dock and popups in percent (lower = more see-through)
     "scale": "auto",  # "auto" | "1" | "2" (next sign-in)
-    "showAllApps": False,  # list the technical apps PolyOS hides from the launcher
+    "showAllApps": False,  # list the technical apps PolyOS hides from Start
     "widgets": ["weather", "calendar", "system", "news", "todo", "photos"],  # the widgets board, in order
     # Taskbar (Settings > Taskbar)
     "taskbarStyle": "floating",  # "floating" capsule | "full": edge to edge, maximized windows meet it
@@ -69,6 +81,8 @@ DEFAULTS: dict = {
     "taskbarDate": True,  # date under the clock
     # Power (Settings > Power)
     "powerMode": "balanced",  # "saver" | "balanced" | "performance" | "maximum"
+    "airplaneMode": False,  # quick settings: every radio off (Wi-Fi, mobile broadband, Bluetooth)
+    "nightLight": False,  # quick settings: warmer colors, less blue light (the screen's gamma, display.py)
     "screenOff": 10,  # minutes of inactivity before the screen turns off (0 = never)
     "sleepAfter": 30,  # minutes of inactivity before the computer sleeps (0 = never)
     # Security and privacy
@@ -76,7 +90,7 @@ DEFAULTS: dict = {
     "lockNews": True,  # headlines and performance on the lock screen
     "cameraAccess": True,
     "micAccess": True,
-    "keepRecent": True,  # remember recently opened apps for the Home Menu
+    "keepRecent": True,  # remember recently opened apps and files for Start
     # Editions (chosen while installing; Settings > Gaming / Developer)
     "edition": "regular",  # "regular" | "developer" | "gaming"
     "editionSetup": True,  # False until the edition's apps were offered at first sign-in
@@ -85,15 +99,6 @@ DEFAULTS: dict = {
     "performanceProfile": "full",  # "full" | "balanced" | "light": set by the hardware check (hwcheck.py)
     "backgroundLimit": "normal",  # "reduced": Vara's commands at low priority, fewer status checks and widget refreshes
     "gameMode": True,  # full-screen games get the performance mode; PolyOS pauses its background work
-    # Vara Voice (optional; Settings > Vara > Voice, offered when setting up the Developer edition)
-    "varaVoice": False,  # listen for "Hey Vera" and answer out loud (vara_voice.py)
-    "varaVoiceWake": True,  # False: only the push-to-talk shortcut (Win+Shift+V) starts listening
-    "varaVoiceSpeak": True,  # False: answers are shown, not spoken
-    "varaVoiceFollowUp": True,  # after an answer, a follow-up needs no name
-    "varaVoiceOpenMic": False,  # always listening: act on anything said, no name (opt-in)
-    "varaHud": True,  # the full-screen HUD opens when the assistant hears its name
-    "varaIndex": True,  # Vara keeps a local search index of the documents in your folders (vara_index.py)
-    "assistantName": "",  # what the assistant is called and answers to ("Jarvis"); "" = Vara ("Hey Vera")
 }
 POWER_MODES = ("saver", "balanced", "performance", "maximum")
 SCREEN_OFF_CHOICES = (0, 1, 2, 3, 5, 10, 15, 30, 60)
@@ -191,12 +196,6 @@ def _theme(value):
     raise ValueError("expected dark or light")
 
 
-def _assistant_name(value):
-    if isinstance(value, str) and (value == "" or re.fullmatch(r"[A-Za-z]{2,20}", value.strip())):
-        return value.strip()
-    raise ValueError("a name is one word of 2 to 20 letters")
-
-
 def _scale(value):
     if value in ("auto", "1", "2"):
         return value
@@ -223,17 +222,12 @@ VALIDATORS = {
     "taskbarWidgets": _bool,
     "taskbarDate": _bool,
     "powerMode": _choice(*POWER_MODES),
+    "airplaneMode": _bool,
+    "displayMode": _choice("duplicate", "extend", "main", "second"),
+    "nightLight": _bool,
     "screenOff": _choice(*SCREEN_OFF_CHOICES),
     "sleepAfter": _choice(*SLEEP_CHOICES),
     "lockOnSleep": _bool,
-    "varaVoice": _bool,
-    "varaVoiceWake": _bool,
-    "varaVoiceSpeak": _bool,
-    "varaVoiceFollowUp": _bool,
-    "varaVoiceOpenMic": _bool,
-    "varaHud": _bool,
-    "varaIndex": _bool,
-    "assistantName": _assistant_name,
     "lockNews": _bool,
     "cameraAccess": _bool,
     "micAccess": _bool,
@@ -246,6 +240,7 @@ VALIDATORS = {
     "devInspector": _bool,
     "gameMode": _bool,
     "pinned": _pinned,
+    "startPinned": _pinned,
     "recent": _pinned,
     "setupDone": _bool,
     "effects": _bool,

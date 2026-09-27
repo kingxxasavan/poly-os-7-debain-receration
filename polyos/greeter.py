@@ -40,6 +40,16 @@ from .server import GREETER_API, Server  # noqa: E402
 log = logging.getLogger("polyos.greeter")
 
 
+
+def _has_pin(user: str) -> bool:
+    """Whether a person signs in with a PIN too (asked from the PIN service; the hash stays with root)."""
+    from . import pin
+    try:
+        st = pin.ask({"op": "status", "user": user}, timeout=2)
+        return bool(st.get("set") and not st.get("blocked"))
+    except (OSError, ValueError):
+        return False
+
 class GreeterBackend(Backend):
     def __init__(self, settings: Settings, bus: EventBus, greeter: LightDM.Greeter):
         super().__init__(settings, bus, home=Path(tempfile.gettempdir()))
@@ -74,7 +84,8 @@ class GreeterBackend(Backend):
 
     def _state_main(self) -> dict:
         users = [{"name": u.get_name(), "displayName": u.get_display_name() or u.get_name(),
-                  "loggedIn": u.get_logged_in()} for u in LightDM.UserList.get_instance().get_users()]
+                  "loggedIn": u.get_logged_in(), "pin": _has_pin(u.get_name())}
+                 for u in LightDM.UserList.get_instance().get_users()]
         sessions = [{"key": s.get_key(), "name": s.get_name()} for s in LightDM.get_sessions()]
         g = self.greeter
         selected = g.get_select_user_hint() or (users[0]["name"] if len(users) == 1 else None)

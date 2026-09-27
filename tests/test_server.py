@@ -15,7 +15,7 @@ class ServerTests(unittest.TestCase):
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory()
         backend = MockBackend(Settings(Path(cls.tmp.name) / "s.json"), EventBus(), home=Path(cls.tmp.name) / "home")
-        cls.server = Server(backend, paths.UI_DIR, "secret-token", dev=False)
+        cls.server = Server(backend, paths.UI_DIR, "secret-token", dev=False, ctl_token="ctl-token")
         cls.server.start()
 
     @classmethod
@@ -64,10 +64,10 @@ class ServerTests(unittest.TestCase):
     def test_post_validation_and_actions(self):
         self.assertEqual(self.request("POST", "/api/launch", {})[0], 400)
         self.assertEqual(self.request("POST", "/api/power", {"action": "format-disk"})[0], 400)
-        status, body, _ = self.request("POST", "/api/launch", {"id": "firefox-esr.desktop"})
+        status, body, _ = self.request("POST", "/api/launch", {"id": "google-chrome.desktop"})
         self.assertEqual(status, 200)
         windows = json.loads(self.request("GET", "/api/state")[1])["windows"]
-        self.assertTrue(any(w["appId"] == "firefox-esr.desktop" for w in windows))
+        self.assertTrue(any(w["appId"] == "google-chrome.desktop" for w in windows))
         status, body, _ = self.request("POST", "/api/settings", {"accent": "#22c55e"})
         self.assertEqual(json.loads(body)["accent"], "#22c55e")
 
@@ -104,7 +104,7 @@ class ServerTests(unittest.TestCase):
 
     def test_store_drivers_procs_and_admin(self):
         catalog = json.loads(self.request("GET", "/api/store")[1])
-        self.assertTrue(any(a["id"] == "firefox" and a["installed"] for a in catalog["apps"]))
+        self.assertTrue(any(a["id"] == "chrome" and a["installed"] for a in catalog["apps"]))
         self.assertEqual(self.request("POST", "/api/store/install", {"id": "nope"})[0], 404)
         self.assertEqual(self.request("POST", "/api/store/install", {"id": "vlc"})[0], 401)  # needs the password
         self.assertEqual(self.request("POST", "/api/admin/auth", {"password": "wrong"})[0], 403)
@@ -112,8 +112,11 @@ class ServerTests(unittest.TestCase):
         status, body, _ = self.request("POST", "/api/store/install", {"id": "vlc"})
         self.assertEqual(status, 200, body)
         self.assertEqual(json.loads(body)["state"], "running")
-        self.assertEqual(self.request("POST", "/api/store/install", {"id": "gimp"})[0], 409)  # one job at a time
-        self.assertEqual(self.request("POST", "/api/store/remove", {"id": "firefox"})[0], 400)
+        queued = json.loads(self.request("POST", "/api/store/install", {"id": "gimp"})[1])  # waits its turn
+        self.assertEqual(queued["state"], "queued")
+        self.assertEqual(json.loads(self.request("POST", "/api/jobs/cancel", {"id": queued["id"]})[1])["state"], "cancelled")
+        self.assertEqual(self.request("POST", "/api/jobs/cancel", {"id": queued["id"]})[0], 409)
+        self.assertEqual(self.request("POST", "/api/store/remove", {"id": "chrome"})[0], 400)
         drivers = json.loads(self.request("GET", "/api/drivers")[1])
         self.assertTrue(any("nvidia-driver" in d["packages"] for d in drivers["devices"]))
         self.assertEqual(self.request("POST", "/api/drivers/install", {"packages": ["openssh-server"]})[0], 400)
@@ -132,7 +135,7 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(json.loads(self.request("GET", "/api/widgets/data")[1])["notes"], "hello")
 
     def test_icons_and_wallpaper(self):
-        status, body, res = self.request("GET", "/icon/app/firefox-esr.desktop")
+        status, body, res = self.request("GET", "/icon/app/google-chrome.desktop")
         self.assertEqual(status, 200)
         self.assertEqual(res.headers["Content-Type"], "image/svg+xml")
         status, _, res = self.request("GET", "/wallpaper/current")
@@ -203,7 +206,7 @@ class ServerTests(unittest.TestCase):
 
     def test_new_settings_and_power(self):
         ok = {"taskbarStyle": "full", "taskbarAlign": "left", "taskbarAutoHide": True, "powerMode": "maximum",
-              "screenOff": 5, "sleepAfter": 0, "desktopIcons": ["firefox-esr.desktop"], "desktopOpen": "single"}
+              "screenOff": 5, "sleepAfter": 0, "desktopIcons": ["google-chrome.desktop"], "desktopOpen": "single"}
         status, body, _ = self.request("POST", "/api/settings", ok)
         self.assertEqual(status, 200, body)
         for bad in ({"taskbarStyle": "top"}, {"powerMode": "turbo"}, {"screenOff": 7}, {"screenOff": True},
@@ -214,10 +217,10 @@ class ServerTests(unittest.TestCase):
         perf = json.loads(self.request("GET", "/api/performance")[1])
         self.assertIn(perf["level"], ("optimal", "busy", "high"))
         # turning activity history off forgets it
-        self.request("POST", "/api/launch", {"id": "firefox-esr.desktop"})
+        self.request("POST", "/api/launch", {"id": "google-chrome.desktop"})
         state = json.loads(self.request("POST", "/api/settings", {"keepRecent": False})[1])
         self.assertEqual(state["recent"], [])
-        self.request("POST", "/api/launch", {"id": "firefox-esr.desktop"})
+        self.request("POST", "/api/launch", {"id": "google-chrome.desktop"})
         self.assertEqual(json.loads(self.request("GET", "/api/state")[1])["settings"]["recent"], [])
         self.request("POST", "/api/settings", {"keepRecent": True, "taskbarStyle": "floating", "taskbarAutoHide": False})
 
@@ -247,7 +250,7 @@ class GreeterServerTests(unittest.TestCase):
                 self.assertEqual(get("/api/packs"), 404)
                 self.assertEqual(get("/api/dev", "POST", {"action": "folder"}), 404)
                 self.assertEqual(get("/api/files/places"), 404)
-                self.assertEqual(get("/api/launch", "POST", {"id": "firefox-esr.desktop"}), 404)
+                self.assertEqual(get("/api/launch", "POST", {"id": "google-chrome.desktop"}), 404)
                 self.assertEqual(get("/api/run-command", "POST", {"command": "mousepad"}), 404)
                 self.assertEqual(get("/api/greeter/login", "POST", {"user": "x", "password": "wrong"}), 403)
                 self.assertEqual(get("/api/greeter/recover", "POST", {"user": "x", "key": "bad", "password": "p"}), 403)
@@ -397,3 +400,19 @@ class InstalledBootMenuTests(unittest.TestCase):
         from polyos import installer
 
         self.assertEqual(installer.GRUB_THEME, "/usr/share/grub/themes/polyos")
+
+
+class CtlTokenTests(ServerTests):
+    """polyos-ctl's token (in a file other programs can read) opens only popups, apps, volume and power."""
+
+    def test_ctl_token_is_limited(self):
+        ok = [("GET", "/api/state", None), ("POST", "/api/popup", {"view": None}), ("POST", "/api/volume", {"level": 30}),
+              ("POST", "/api/settings", {"developerMode": False})]
+        for method, path, body in ok:
+            self.assertEqual(self.request(method, path, body, token="ctl-token")[0], 200, path)
+        refused = [("POST", "/api/store/install", {"id": "vlc"}), ("POST", "/api/admin/auth", {"password": "polyos"}),
+                   ("POST", "/api/drivers/install", {"packages": ["nvidia-driver"]}), ("GET", "/api/vara/config", None),
+                   ("POST", "/api/settings", {"wallpaper": "builtin:polyos-night.jpg"}), ("POST", "/api/account/pin", {"pin": "1234"}),
+                   ("GET", "/api/files/list", None)]
+        for method, path, body in refused:
+            self.assertEqual(self.request(method, path, body, token="ctl-token")[0], 403, path)

@@ -23,7 +23,7 @@ export function mount(root, store) {
   let catalog = null;
   let view = params.get('page') || 'featured';
   let detail = null;
-  const jobs = new Map(); // app id -> running job
+  const jobs = new Map(); // app id -> its job (running, queued or finished)
   let lastError = null;
   const buttons = new Map();
 
@@ -36,13 +36,18 @@ export function mount(root, store) {
       const pct = Math.round((job.progress || 0) * 100);
       return h('button', { class: `${cls} busy`, disabled: true, style: { '--pct': `${pct}%` } }, `${pct}%`);
     }
-    const busy = [...jobs.values()].some((j) => j.state === 'running');
+    // waiting its turn behind another installation: click to take it out of the queue
+    if (job && job.state === 'queued') {
+      return h('button', { class: `${cls} queued`, title: 'Waiting for the other installations. Click to cancel.',
+        onclick: (e) => { e.stopPropagation(); api.post('/api/jobs/cancel', { id: job.id }).catch((err) => { lastError = err.message; render(); }); } },
+      'Queued');
+    }
     if (app.installed) {
       return app.desktop.length
         ? h('button', { class: `${cls} open`, onclick: (e) => { e.stopPropagation(); openApp(app); } }, 'Open')
         : h('button', { class: `${cls} done`, disabled: true }, 'Installed');
     }
-    return h('button', { class: `${cls} get`, disabled: busy, onclick: (e) => { e.stopPropagation(); act(app, 'install'); } }, 'Get');
+    return h('button', { class: `${cls} get`, onclick: (e) => { e.stopPropagation(); act(app, 'install'); } }, 'Install');
   }
 
   async function act(app, action) {
@@ -85,7 +90,7 @@ export function mount(root, store) {
 
   function detailView(app) {
     const remove = app.installed && !app.system
-      ? h('button.st-btn.remove', { onclick: () => act(app, 'remove'), disabled: jobs.get(app.id)?.state === 'running' }, 'Remove') : null;
+      ? h('button.st-btn.remove', { onclick: () => act(app, 'remove'), disabled: ['running', 'queued'].includes(jobs.get(app.id)?.state) }, 'Remove') : null;
     const cat = catalog.categories.find((c) => c[0] === app.category);
     return h('section.st-detail',
       h('button.su-back', { onclick: () => { detail = null; render(); } }, icon('chevronLeft'), 'Back'),
@@ -98,7 +103,7 @@ export function mount(root, store) {
       h('div.st-facts',
         h('div', h('small', 'Source'), h('b', app.source === 'debian' ? 'Debian archive' : 'Flathub (sandboxed app)')),
         h('div', h('small', app.source === 'debian' ? 'Packages' : 'App ID'), h('b', app.source === 'debian' ? app.packages.join(', ') : app.ref)),
-        h('div', h('small', 'Opens from'), h('b', app.desktop.length ? 'Launcher and Home Menu' : 'Terminal'))));
+        h('div', h('small', 'Opens from'), h('b', app.desktop.length ? 'The Start menu' : 'Terminal'))));
   }
 
   function section(title, apps, big = false) {

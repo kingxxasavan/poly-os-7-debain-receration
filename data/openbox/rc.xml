@@ -74,11 +74,9 @@
     <keybind key="A-F1"><action name="Execute"><command>polyos-ctl start-menu</command></action></keybind>
     <keybind key="W-space"><action name="Execute"><command>polyos-ctl start-menu</command></action></keybind>
     <keybind key="W-a"><action name="Execute"><command>polyos-ctl popup quick</command></action></keybind>
-    <keybind key="W-s"><action name="Execute"><command>polyos-ctl popup launcher</command></action></keybind>
+    <keybind key="W-s"><action name="Execute"><command>polyos-ctl popup start</command></action></keybind>
     <keybind key="W-r"><action name="Execute"><command>polyos-ctl popup run</command></action></keybind>
     <keybind key="W-v"><action name="Execute"><command>polyos-ctl popup vara</command></action></keybind>
-    <keybind key="W-S-v"><action name="Execute"><command>polyos-ctl vara listen</command></action></keybind>
-    <keybind key="W-j"><action name="Execute"><command>polyos-ctl vara hud</command></action></keybind>
     <keybind key="XF86LaunchA"><action name="Execute"><command>polyos-ctl popup launcher</command></action></keybind>
     <keybind key="W-i"><action name="Execute"><command>polyos-ctl open settings</command></action></keybind>
     <keybind key="W-e"><action name="Execute"><command>polyos-ctl run files</command></action></keybind>
@@ -89,6 +87,7 @@
     <keybind key="W-l"><action name="Execute"><command>polyos-ctl power lock</command></action></keybind>
     <keybind key="W-x"><action name="Execute"><command>polyos-ctl popup quickmenu</command></action></keybind>
     <keybind key="W-w"><action name="Execute"><command>polyos-ctl popup widgets</command></action></keybind>
+    <keybind key="W-p"><action name="Execute"><command>polyos-ctl popup project</command></action></keybind>
     <keybind key="C-S-Escape"><action name="Execute"><command>polyos-ctl open taskmgr</command></action></keybind>
     <keybind key="C-A-Delete"><action name="Execute"><command>polyos-ctl open taskmgr</command></action></keybind>
     <keybind key="Print"><action name="Execute"><command>xfce4-screenshooter -f</command></action></keybind>

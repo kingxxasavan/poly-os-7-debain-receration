@@ -27,10 +27,13 @@ function placePopup(p) {
     Object.assign(popup.style, { left: '12px', top: '12px', width: `${Math.min(p.width, W - 24)}px`, height: `${H - panelHeight - 16}px` });
   } else {
     const dockX = state.settings.taskbarStyle === 'full' ? 0 : dockMargin;
-    let x = p.anchorX == null ? 12 : Math.round(dockX + p.anchorX - p.width / 2);
-    x = Math.max(12, Math.min(x, W - p.width - 12));
+    const width = Math.min(p.width, W - 24);
+    const height = Math.min(p.height, H - panelHeight - 16);
+    let x = p.anchorX == null ? 12 : Math.round(dockX + p.anchorX - width / 2);
+    if (p.anchorX == null && p.view === 'start' && state.settings.taskbarAlign !== 'left') x = Math.round((W - width) / 2);
+    x = Math.max(12, Math.min(x, W - width - 12));
     Object.assign(popup.style, {
-      left: `${x}px`, top: `${H - panelHeight - p.height - 4}px`, width: `${p.width}px`, height: `${p.height}px`,
+      left: `${x}px`, top: `${H - panelHeight - height - 4}px`, width: `${width}px`, height: `${height}px`,
     });
   }
   popup.hidden = false;

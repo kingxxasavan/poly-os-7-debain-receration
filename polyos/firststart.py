@@ -1,9 +1,9 @@
 """After installing: what the setup on the USB drive chose that needs the internet, done on its own.
 
 Setup asks everything before PolyOS installs, so the installed computer starts straight to the
-desktop. What needs a download comes after: the recommended drivers the hardware check found,
-the edition's apps (Gaming or Developer), and Vara Voice if it was chosen with the Developer
-edition. The installer writes them to PLAN_PATH, and polyos-first-start.timer runs `polyos-admin first-start` as root every few minutes after starting
+desktop. Two things need a download: the recommended drivers the hardware check found, and the
+edition's apps (Gaming or Developer). The installer writes them to PLAN_PATH, and
+polyos-first-start.timer runs `polyos-admin first-start` as root every few minutes after starting
 up until they're installed; offline, it just tries again later. STATUS_PATH (readable by
 everyone) is what the desktop shows as notifications.
 """
@@ -20,14 +20,14 @@ STATUS_PATH = Path("/var/lib/polyos/first-start-status.json")
 PACKS = ("gaming", "developer")
 
 
-def clean_plan(drivers: list, pack: str | None, driver_re, vara: bool = False) -> dict:
-    """Only driver package names the driver check allows, a known edition pack, and Vara Voice or not."""
+def clean_plan(drivers: list, pack: str | None, driver_re) -> dict:
+    """Only driver package names the driver check allows, and a known edition pack."""
     names = [d for d in dict.fromkeys(drivers or []) if isinstance(d, str) and driver_re.match(d)][:40]
-    return {"drivers": names, "pack": pack if pack in PACKS else None, "vara": vara is True}
+    return {"drivers": names, "pack": pack if pack in PACKS else None}
 
 
 def pending(plan: dict) -> bool:
-    return bool(plan.get("drivers") or plan.get("pack") or plan.get("vara"))
+    return bool(plan.get("drivers") or plan.get("pack"))
 
 
 def load(path: Path) -> dict:
@@ -52,14 +52,14 @@ def write_plan(plan: dict, root: Path) -> None:
 
 
 def run(emit, install_drivers, install_pack, online, plan_path: Path = PLAN_PATH, status_path: Path = STATUS_PATH,
-        clock=time.time, install_voice=None) -> dict:
-    """One try. install_drivers(names), install_pack(name) and install_voice() raise on failure; online() -> bool."""
+        clock=time.time) -> dict:
+    """One try. install_drivers(names) and install_pack(name) raise on failure; online() -> bool."""
     plan = load(plan_path)
     status = load(status_path)
     if not pending(plan):
         plan_path.unlink(missing_ok=True)
         return status
-    what = [x for x in (("drivers" if plan.get("drivers") else None), plan.get("pack"), ("vara" if plan.get("vara") else None)) if x]
+    what = [x for x in (("drivers" if plan.get("drivers") else None), plan.get("pack")) if x]
     status.update(state="waiting", what=what, pack=plan.get("pack"), error=None, updated=clock())
     if not online():
         status["message"] = "Waiting for the internet to finish setting up."
@@ -82,13 +82,6 @@ def run(emit, install_drivers, install_pack, online, plan_path: Path = PLAN_PATH
             plan["pack"] = None
         except Exception as exc:  # noqa: BLE001
             errors.append(f"Apps: {exc}")
-    if plan.get("vara") and install_voice is not None:
-        try:
-            install_voice()
-            plan["vara"] = False
-            status["varaDone"] = True
-        except Exception as exc:  # noqa: BLE001
-            errors.append(f"Vara Voice: {exc}")
     attempts = int(status.get("attempts") or 0) + 1
     if pending(plan) and attempts < 5:
         _write(plan_path, plan, 0o644)

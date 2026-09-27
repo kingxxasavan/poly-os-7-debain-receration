@@ -2,3 +2,15 @@
 # in ~/.config/mimeapps.list or with "Open With" in their apps.
 [Default Applications]
 inode/directory=polyos-files.desktop;thunar.desktop;
+# the web: Google Chrome (Chromium on ARM computers), then Firefox if that's what's installed
+text/html=google-chrome.desktop;chromium.desktop;firefox-esr.desktop;
+x-scheme-handler/http=google-chrome.desktop;chromium.desktop;firefox-esr.desktop;
+x-scheme-handler/https=google-chrome.desktop;chromium.desktop;firefox-esr.desktop;
+x-scheme-handler/about=google-chrome.desktop;chromium.desktop;firefox-esr.desktop;
+application/xhtml+xml=google-chrome.desktop;chromium.desktop;firefox-esr.desktop;
+application/pdf=org.gnome.Evince.desktop;google-chrome.desktop;
+image/png=org.xfce.ristretto.desktop;
+image/jpeg=org.xfce.ristretto.desktop;
+image/gif=org.xfce.ristretto.desktop;
+image/webp=org.xfce.ristretto.desktop;
+text/plain=org.xfce.mousepad.desktop;

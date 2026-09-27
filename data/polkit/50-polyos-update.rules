@@ -7,7 +7,9 @@ polkit.addRule(function (action, subject) {
         var unit = action.lookup("unit");
         var verb = action.lookup("verb");
         if (verb == "start" && (unit == "polyos-update-check.service" || unit == "polyos-update-tonight.service" ||
-                                unit == "polyos-update-now.service")) {
+                                unit == "polyos-update-now.service" ||
+                                // Start > Power > Restart to Windows: picks Windows for the next start only
+                                unit == "polyos-restart-windows.service")) {
             return polkit.Result.YES;
         }
     }

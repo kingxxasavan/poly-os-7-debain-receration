@@ -343,12 +343,37 @@ def bitlocker_volumes(disks: list[dict]) -> list[dict]:
             for d in disks if not d.get("isLive") for p in d["partitions"] if (p.get("fstype") or "").lower() == "bitlocker"]
 
 
+WINDOWS_ASLEEP_REASON = ("Windows is only asleep, not shut down (Fast Startup is on), so changing this drive now would "
+                         "send Windows into Automatic Repair. Start Windows, turn off Fast Startup (Control Panel › "
+                         "Power Options › Choose what the power buttons do), shut down, and start this USB drive again.")
+NTFS_HIBERNATED, NTFS_UNCLEAN = 14, 15  # ntfs-3g.probe exit codes
+
+
+def windows_asleep(disks: list[dict]) -> list[dict]:
+    """NTFS partitions Windows left hibernated (Fast Startup) or not cleanly unmounted."""
+    return [{"path": p["path"], "disk": d["path"], "model": d.get("model") or d["path"], "size": p["size"],
+             "label": p.get("label") or "", "state": p["ntfsState"]}
+            for d in disks if not d.get("isLive") for p in d["partitions"] if p.get("ntfsState")]
+
+
 def finish_install_options(disks: list[dict], uefi: bool) -> list[dict]:
     """A partition only works in UEFI mode if some drive has an EFI system partition PolyOS can share.
 
     And while BitLocker is on, PolyOS doesn't go next to Windows: it can't shrink an encrypted
     partition, and a new boot manager would make Windows ask for its BitLocker recovery key.
     Deleting the encrypted partition (or erasing the whole drive) is still fine."""
+    # Windows asleep (Fast Startup): it keeps every drive it had open in its saved session, so any
+    # change to a drive with Windows' partitions on it breaks the resume. Only erasing a whole drive
+    # stays possible (it asks first, as always).
+    if windows_asleep(disks):
+        for disk in disks:
+            if disk.get("isLive") or not any(p.get("fstype") == "ntfs" for p in disk["partitions"]):
+                continue
+            disk["alongside"] = {"possible": False, "reason": WINDOWS_ASLEEP_REASON, "windowsAsleep": True}
+            for region in disk["free"]:
+                region["install"] = {"possible": False, "reason": WINDOWS_ASLEEP_REASON, "windowsAsleep": True}
+            for part in disk["partitions"]:
+                part["install"] = {"possible": False, "reason": WINDOWS_ASLEEP_REASON, "windowsAsleep": True}
     locked = {v["path"] for v in bitlocker_volumes(disks)}
     if locked:
         for disk in disks:
@@ -463,22 +488,17 @@ def validate_plan(plan: dict, existing_users: set[str] | None = None) -> dict:
     profile = plan.get("profile") if plan.get("profile") in hwcheck.PROFILE_SETTINGS else None
     background = plan.get("background") if plan.get("background") in ("normal", "reduced") else None
     look = {**(hwcheck.PROFILE_SETTINGS[profile] if profile else {}), **({"backgroundLimit": background} if background else {})}
-    # Vara, the voice assistant: offered with the Developer edition only, and only when asked for
-    vara = edition == "developer" and plan.get("vara") is True
-    if vara:
-        look["varaVoice"] = True
     clean = {"mode": mode, "disk": disk, "hostname": hostname, "timezone": tz,
              "user": {"username": username, "fullName": full, "password": password, "recoveryKey": str(key)},
              "appearance": {"theme": theme, "accent": accent.lower()}, "edition": edition,
              # Setup asked everything before installing, so the new system starts straight to the
              # desktop; the edition's apps and the drivers install by themselves once online.
              "extraSettings": {**look, "edition": edition, "developerMode": edition == "developer",
-                               "showAllApps": edition == "developer", "gameMode": edition == "gaming",
+                               "showAllApps": False, "gameMode": edition == "gaming",
                                "editionSetup": True},
              "firstStart": firststart.clean_plan(plan.get("drivers") or [], edition if edition != "regular" else None,
-                                                 drivers.DRIVER_PACKAGE_RE, vara=vara),
-             "polyAccount": poly_account_state(plan.get("polyAccount")),
-             "varaConfig": vara_config(plan.get("varaConfig")) if vara else None}
+                                                 drivers.DRIVER_PACKAGE_RE),
+             "polyAccount": poly_account_state(plan.get("polyAccount"))}
     if layout:
         clean.update(layout)
     if mode == "space":
@@ -492,17 +512,6 @@ def validate_plan(plan: dict, existing_users: set[str] | None = None) -> dict:
             raise InstallError(f"Give PolyOS at least {MIN_ROOT // GiB} GB.")
         clean["size"] = size
     return clean
-
-
-def vara_config(cfg) -> dict | None:
-    """Vara's AI provider and key, given in setup (Developer edition), for the new account."""
-    if not isinstance(cfg, dict):
-        return None
-    endpoint, model, key = (str(cfg.get(k) or "").strip() for k in ("endpoint", "model", "apiKey"))
-    if not re.fullmatch(r"https://\S{4,200}", endpoint) or not 0 < len(model) <= 200 or not re.fullmatch(r"\S{8,500}", key):
-        return None
-    return {"endpoint": endpoint.rstrip("/"), "model": model, "apiKey": key,
-            "provider": cfg.get("provider") if cfg.get("provider") in ("openai", "claude") else "openai"}
 
 
 def poly_account_state(state) -> dict | None:
@@ -726,11 +735,22 @@ def live_disk() -> str | None:
         return None
 
 
+def ntfs_state(part: dict) -> str | None:
+    """"hibernated" or "unclean" when Windows didn't shut down properly (ntfs-3g.probe), else None."""
+    if part.get("fstype") != "ntfs" or part.get("mounts") or not _have("ntfs-3g.probe"):
+        return None
+    try:
+        rc = subprocess.run(["ntfs-3g.probe", "--readwrite", part["path"]], capture_output=True, timeout=60).returncode
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return {NTFS_HIBERNATED: "hibernated", NTFS_UNCLEAN: "unclean"}.get(rc)
+
+
 def _resize_info(runner: Runner, part: dict) -> dict | None:
     if part["mounts"] or part["size"] < MIN_ROOT + KEEP_FREE:
         return None
     if part["fstype"] == "ntfs" and _have("ntfsresize"):
-        proc = subprocess.run(["ntfsresize", "--info", "--force", "--no-progress-bar", part["path"]],
+        proc = subprocess.run(["ntfsresize", "--info", "--no-progress-bar", part["path"]],
                               capture_output=True, text=True, timeout=120, env={**os.environ, "LC_ALL": "C"})
         minimum, reason = parse_ntfsresize_info(proc.stdout + proc.stderr)
         return {"fs": "ntfs", "min": minimum, "used": minimum, "reason": reason}
@@ -777,6 +797,7 @@ def probe(emit: Emit | None = None) -> dict:
         resize = {}
         if disk["path"] != live:
             for part in disk["partitions"]:
+                part["ntfsState"] = ntfs_state(part)
                 info = _resize_info(runner, part)
                 if info:
                     resize[part["path"]] = info
@@ -785,7 +806,8 @@ def probe(emit: Emit | None = None) -> dict:
     if uefi and _have("mokutil"):
         secure_boot = "enabled" in runner.run(["mokutil", "--sb-state"], check=False).lower()
     return {"uefi": uefi, "secureBoot": secure_boot, "ram": _ram_bytes(), "disks": finish_install_options(out, uefi),
-            "arch": debian_arch(), "minBytes": MIN_ROOT, "liveDisk": live, "bitlocker": bitlocker_volumes(out)}
+            "arch": debian_arch(), "minBytes": MIN_ROOT, "liveDisk": live, "bitlocker": bitlocker_volumes(out),
+            "windowsAsleep": windows_asleep(out)}
 
 
 # ==== the drive screen's Delete and New (run as root, right away, like Windows Setup) ======
@@ -927,6 +949,13 @@ class Installer:
         if info and info["size"] < MIN_ROOT:
             raise InstallError("That disk is too small for PolyOS.")
         self.disk_info = info
+        # Windows asleep (Fast Startup) on a drive we'd change but not erase: stop before touching anything
+        if not self.dry and self.plan.get("mode") != "erase":
+            keep = involved - set(self.plan.get("wipe", {}))
+            for path in keep:
+                for part in (disks.get(path) or {}).get("partitions", []):
+                    if ntfs_state(part):
+                        raise InstallError(WINDOWS_ASLEEP_REASON)
         # anything on these disks that the live system mounted (e.g. automount) must go first
         for path in involved:
             for part in (disks.get(path) or {}).get("partitions", []):
@@ -1063,9 +1092,9 @@ class Installer:
                 raise InstallError("That would leave the other system too little room.")
             self.step(0.02, f"Making room: shrinking {part['os'] or 'the other system'}…")
             if info["fs"] == "ntfs":
-                self.r.run(["ntfsresize", "--no-action", "--force", "--size", str(new_bytes), part["path"]],
+                self.r.run(["ntfsresize", "--no-action", "--size", str(new_bytes), part["path"]],
                            input="y\n", what="Checking Windows' partition", timeout=1800)
-                self.r.run(["ntfsresize", "--force", "--no-progress-bar", "--size", str(new_bytes), part["path"]],
+                self.r.run(["ntfsresize", "--no-progress-bar", "--size", str(new_bytes), part["path"]],
                            input="y\n", what="Shrinking Windows' partition", timeout=7200)
             else:
                 self.r.run(["e2fsck", "-f", "-y", part["path"]], what="Checking the Linux partition", timeout=3600)
@@ -1326,11 +1355,6 @@ class Installer:
             except (OSError, ValueError):
                 pass
         self._write(f"{home}/.config/polyos/settings.json", json.dumps(settings, indent=2) + "\n")
-        if self.plan.get("varaConfig"):  # Vara's AI provider and key, from setup (readable by the account only)
-            from .vara import DEFAULT_CONFIG
-            self._write(f"{home}/.config/polyos/vara.json", json.dumps({**DEFAULT_CONFIG, **self.plan["varaConfig"]}, indent=2) + "\n")
-            if not self.dry:
-                os.chmod(TARGET / home / ".config/polyos/vara.json", 0o600)
         if self.plan.get("polyAccount"):  # connected during setup: this computer stays connected
             self._write(f"{home}/.config/polyos/poly-account.json", json.dumps(self.plan["polyAccount"], indent=2) + "\n")
             if not self.dry:
@@ -1362,9 +1386,11 @@ class Installer:
         dual = self.dual
         self._write("etc/default/grub",
                     "# Written by the PolyOS installer. Run update-grub after editing.\n"
-                    "GRUB_DEFAULT=0\n"
-                    f"GRUB_TIMEOUT={10 if dual else 2}\n"
-                    f"GRUB_TIMEOUT_STYLE={'menu' if dual else 'hidden'}\n"
+                    # straight to PolyOS; with Windows too, Shift or Esc shows the menu, and Start ›
+                    # Power › Restart to Windows picks it for one start (grub-reboot needs "saved")
+                    "GRUB_DEFAULT=saved\n"
+                    "GRUB_TIMEOUT=2\n"
+                    "GRUB_TIMEOUT_STYLE=hidden\n"
                     'GRUB_DISTRIBUTOR="PolyOS"\n'
                     'GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"\n'
                     'GRUB_CMDLINE_LINUX=""\n'

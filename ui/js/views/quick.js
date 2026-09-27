@@ -1,6 +1,6 @@
-// Quick settings: Wi-Fi, volume, brightness, battery, shortcuts.
+// Quick settings: Wi-Fi, airplane mode, energy saver, night light, sound, brightness, volume, battery.
 
-import { api, closePopup, openSettings, power } from '../api.js';
+import { api, closePopup, openSettings, saveSettings } from '../api.js';
 import { slider, wifiPanel } from '../components.js';
 import { h, icon, networkIcon, networkLabel, volumeIcon } from '../ui.js';
 
@@ -14,62 +14,59 @@ const reopen = (store, data, height) =>
 export default function quick(root, store, data) {
   if (data.sub === 'wifi') return wifiList(root, store);
   const sys = () => store.state.system;
+  const set = () => store.state.settings;
+  const save = (patch) => saveSettings(patch).catch((err) => console.warn(err.message));
   const main = h('div.qs');
   root.append(main);
 
-  // ---- tiles ---------------------------------------------------------------------
-  const wifiTile = h('div.tile');
-  const wifiToggle = h('button.tile-main', { title: 'Turn Wi-Fi on or off' });
-  const wifiMore = h('button.tile-more', { title: 'Choose a network' }, icon('chevronRight'));
-  wifiTile.append(wifiToggle, wifiMore);
-  wifiToggle.addEventListener('click', () => {
+  // ---- toggles, like Windows 11: a button each, its name underneath ------------------
+  function toggle(label, onClick, more) {
+    const btn = h('button.qt-btn', { onclick: onClick, 'aria-pressed': 'false' });
+    const el = h('div.qt', h('div.qt-pill', btn, more || null), h('span.qt-label', label));
+    el.set = (on, ico, disabled = false, sub = label) => {
+      el.classList.toggle('on', !!on);
+      el.classList.toggle('disabled', !!disabled);
+      btn.setAttribute('aria-pressed', String(!!on));
+      btn.title = sub;
+      btn.replaceChildren(ico);
+      el.lastChild.textContent = sub;
+    };
+    return el;
+  }
+  const wifiMore = h('button.qt-more', { title: 'Choose a network', onclick: () => reopen(store, { sub: 'wifi' }, WIFI_HEIGHT) }, icon('chevronRight'));
+  const wifi = toggle('Wi-Fi', () => {
     const net = sys().network;
-    if (!net.wifiDevice) return;
-    api.post('/api/wifi/enabled', { enabled: !net.wifiEnabled }).catch((err) => console.warn(err.message));
-  });
-
-  const muteTile = h('div.tile', h('button.tile-main'));
-  muteTile.firstChild.addEventListener('click', () => api.post('/api/volume', { toggleMute: true }));
+    if (net.wifiDevice) api.post('/api/wifi/enabled', { enabled: !net.wifiEnabled }).catch((err) => console.warn(err.message));
+  }, wifiMore);
+  const airplane = toggle('Airplane mode', () => save({ airplaneMode: !set().airplaneMode }));
+  const saver = toggle('Energy saver', () => save({ powerMode: set().powerMode === 'saver' ? 'balanced' : 'saver' }));
+  const night = toggle('Night light', () => save({ nightLight: !set().nightLight }));
+  const sound = toggle('Sound', () => api.post('/api/volume', { toggleMute: true }));
 
   // ---- sliders -------------------------------------------------------------------
+  const briSlider = slider({ min: 5, label: 'Brightness', onInput: (v) => api.post('/api/brightness', { level: v }) });
+  const briRow = h('div.qs-slider', h('span.icon-btn.static', icon('sun')), briSlider);
   const volSlider = slider({ label: 'Volume', onInput: (v) => api.post('/api/volume', { level: v }) });
   const volBtn = h('button.icon-btn', { title: 'Mute', onclick: () => api.post('/api/volume', { toggleMute: true }) });
   const volRow = h('div.qs-slider', volBtn, volSlider);
-  const briSlider = slider({ min: 5, label: 'Brightness', onInput: (v) => api.post('/api/brightness', { level: v }) });
-  const briRow = h('div.qs-slider', h('span.icon-btn.static', icon('sun')), briSlider);
 
-  // ---- footer --------------------------------------------------------------------
+  // ---- battery -------------------------------------------------------------------
   const battery = h('div.qs-battery');
-  const footer = h(
-    'div.qs-footer',
-    battery,
-    h('div.footer-actions',
-      h('button.icon-btn', { title: 'Settings', onclick: () => { openSettings(); closePopup(); } }, icon('settings')),
-      h('button.icon-btn', { title: 'Lock', onclick: () => power('lock') }, icon('lock')),
-      h('button.icon-btn', { title: 'Power options', onclick: () => api.post('/api/popup', { view: 'start' }) }, icon('power'))),
-  );
+  const footer = h('div.qs-footer', battery);
 
-  main.append(h('div.qs-tiles', wifiTile, muteTile), volRow, briRow, footer);
-
-  wifiMore.addEventListener('click', () => reopen(store, { sub: 'wifi' }, WIFI_HEIGHT));
+  main.append(h('div.qs-toggles', wifi, airplane, saver, night, sound), briRow, volRow, footer);
 
   function render() {
     const { network, volume, brightness, battery: bat } = sys();
+    const s = set();
     const wifiOn = network.available && network.wifiDevice && network.wifiEnabled;
-    wifiTile.classList.toggle('on', !!wifiOn || network.kind === 'ethernet');
-    wifiTile.classList.toggle('disabled', !network.wifiDevice);
-    wifiToggle.replaceChildren(
-      h('span.tile-ico', networkIcon(network)),
-      h('span.tile-text', h('b', network.kind === 'ethernet' ? 'Ethernet' : 'Wi-Fi'), h('small', networkLabel(network))),
-    );
+    wifi.set(wifiOn || network.kind === 'ethernet', networkIcon(network), !network.wifiDevice && network.kind !== 'ethernet',
+      network.kind === 'ethernet' ? 'Ethernet' : wifiOn && network.name ? network.name : 'Wi-Fi');
     wifiMore.hidden = !network.wifiDevice;
-
-    muteTile.classList.toggle('on', volume.available && !volume.muted);
-    muteTile.classList.toggle('disabled', !volume.available);
-    muteTile.firstChild.replaceChildren(
-      h('span.tile-ico', volumeIcon(volume)),
-      h('span.tile-text', h('b', 'Sound'), h('small', !volume.available ? 'No output' : volume.muted ? 'Muted' : 'On')),
-    );
+    airplane.set(s.airplaneMode, icon('airplane'));
+    saver.set(s.powerMode === 'saver', icon('leaf'));
+    night.set(s.nightLight, icon('nightLight'));
+    sound.set(volume.available && !volume.muted, volumeIcon(volume), !volume.available, volume.muted ? 'Muted' : 'Sound');
 
     volRow.hidden = !volume.available;
     volBtn.replaceChildren(volumeIcon(volume));
@@ -77,6 +74,7 @@ export default function quick(root, store, data) {
     briRow.hidden = !brightness.available;
     briSlider.set(brightness.level);
 
+    footer.hidden = !bat.present;
     battery.replaceChildren(
       ...(bat.present
         ? [icon('battery', bat.level, bat.charging), h('span', `${bat.level}%`), h('small', bat.charging ? 'Charging' : bat.plugged ? 'Plugged in' : 'On battery')]
@@ -85,7 +83,7 @@ export default function quick(root, store, data) {
   }
 
   const unsubscribe = store.subscribe((_s, changed) => {
-    if (changed.has('system')) render();
+    if (changed.has('system') || changed.has('settings')) render();
   });
   render();
   return unsubscribe;

@@ -59,8 +59,7 @@ PACKAGES = {
             "picom", "xcape", "wireplumber | pulseaudio-utils", "network-manager", "brightnessctl", "mesa-utils",
             "papirus-icon-theme", "fonts-inter | fonts-noto-core", "lxpolkit | mate-polkit", "pciutils", "flatpak",
             "playerctl", "libxss1", "power-profiles-daemon", "gstreamer1.0-plugins-good",
-            # Vara: reading PDFs, and driving the web browser (xdotool, xclip)
-            "poppler-utils", "xdotool", "xclip",
+            "gsettings-desktop-schemas", "libnotify-bin",
         ],
         "summary": "PolyOS desktop shell",
         "description": (
@@ -79,23 +78,26 @@ PACKAGES = {
             "polyos-shell (= {version})", "xorg", "xserver-xorg-input-libinput", "lightdm", "lightdm-gtk-greeter",
             "gir1.2-lightdm-1", "picom", "pipewire-audio", "wireplumber", "network-manager", "papirus-icon-theme",
             "fonts-inter | fonts-noto-core", "dbus-user-session", "xdg-user-dirs", "adwaita-icon-theme",
-            "gvfs", "xfce4-terminal", "mousepad", "firefox-esr", "pciutils", "xcape", "systemd-timesyncd", "polkitd",
+            # the browser: Google Chrome (the image adds it on Intel/AMD computers), else Chromium
+            "google-chrome-stable | chromium | firefox-esr",
+            "gvfs", "xfce4-terminal", "mousepad", "gnome-calculator", "pciutils", "xcape", "systemd-timesyncd", "polkitd",
             # advanced sound on every edition: the full mixer, and pactl for Settings > Sound's device lists
             "pavucontrol", "pulseaudio-utils",
         ],
         "recommends": [
             "brightnessctl", "lxpolkit | mate-polkit", "xfce4-notifyd", "tumbler", "playerctl",
             "xfce4-screenshooter", "fonts-noto-color-emoji", "network-manager-gnome",
-            "arandr", "ristretto", "file-roller", "gvfs-backends", "plymouth", "plymouth-label", "evince",
+            "ristretto", "file-roller", "gvfs-backends", "plymouth", "plymouth-label", "evince",
             "flatpak", "bluez", "blueman", "usbutils", "isenkram-cli", "mokutil", "libxss1", "ufw",
-            "unattended-upgrades", "zram-tools", "gamemode",
+            "unattended-upgrades", "zram-tools", "gamemode", "fwupd",
             "power-profiles-daemon", "gstreamer1.0-plugins-good", "gstreamer1.0-plugins-base", "gstreamer1.0-libav",
         ],
         "summary": "PolyOS desktop environment (complete)",
         "description": (
             "Pulls in everything for a complete PolyOS system: the shell, the X server, the\n"
             "LightDM login screen themed for PolyOS, audio, networking, fonts, icons and a\n"
-            "set of default apps (Firefox ESR, Terminal, Mousepad) next to PolyOS Files."
+            "set of default apps (Google Chrome or Chromium, Terminal, Text Editor, Calculator) next\n"
+            "to PolyOS Files."
         ),
     },
 }
@@ -109,6 +111,13 @@ SCRIPTS = {
             "    # the update service: hourly, following Settings > Updates\n"
             "    if [ -d /run/systemd/system ]; then systemctl daemon-reload >/dev/null 2>&1 || true; fi\n"
             "    systemctl enable polyos-update.timer >/dev/null 2>&1 || true\n"
+            "    # the boot menu waits for no one now (etc/default/grub.d/50-polyos-menu.cfg), on installed systems\n"
+            "    if [ -d /run/systemd/system ] && [ ! -e /run/live/medium ] && [ -f /boot/grub/grub.cfg ] && command -v update-grub >/dev/null; then\n"
+            "        update-grub >/dev/null 2>&1 || true\n"
+            "    fi\n"
+            "    # PIN sign-in for the lock screen (polyos/pin.py)\n"
+            "    systemctl enable polyos-pin.socket >/dev/null 2>&1 || true\n"
+            "    if [ -d /run/systemd/system ]; then systemctl start polyos-pin.socket >/dev/null 2>&1 || true; fi\n"
             "    # (an installed, running PolyOS, not the ISO build) the USB drive's boot menu looks for this\n"
             "    if [ -d /run/systemd/system ] && [ ! -e /run/live/medium ] && [ ! -e /boot/polyos-installed ]; then\n"
             "        echo PolyOS > /boot/polyos-installed || true\n"
@@ -118,7 +127,7 @@ SCRIPTS = {
         ),
         "prerm": (
             "#!/bin/sh\nset -e\n"
-            "if [ \"$1\" = remove ]; then systemctl disable --now polyos-update.timer >/dev/null 2>&1 || true; fi\n"
+            "if [ \"$1\" = remove ]; then systemctl disable --now polyos-update.timer polyos-pin.socket >/dev/null 2>&1 || true; fi\n"
             "find /usr/lib/polyos -type d -name __pycache__ -prune -exec rm -rf {} + 2>/dev/null || true\n"
         ),
     },
@@ -197,6 +206,12 @@ def package_files(name: str) -> list[tuple[Path | bytes, str, int]]:
         (data / "bin/polyos-admin", "usr/libexec/polyos/polyos-admin", 0o755),
         (data / "bin/polyos-recover", "usr/libexec/polyos/polyos-recover", 0o755),
         (data / "pam/polyos-lock", "etc/pam.d/polyos-lock", 0o644),
+        (data / "pam/polyos-login", "etc/pam.d/polyos-login", 0o644),
+        (data / "bin/polyos-pin", "usr/libexec/polyos/polyos-pin", 0o755),
+        *[(p, f"usr/lib/systemd/system/{p.name}", 0o644) for p in sorted((data / "systemd").glob("polyos-pin*"))],
+        (data / "systemd/polyos-restart-windows.service", "usr/lib/systemd/system/polyos-restart-windows.service", 0o644),
+        (data / "xfconf/ristretto.xml", "etc/xdg/xfce4/xfconf/xfce-perchannel-xml/ristretto.xml", 0o644),
+        (data / "grub-defaults/50-polyos-menu.cfg", "etc/default/grub.d/50-polyos-menu.cfg", 0o644),
         (data / "polkit/50-polyos-recover.rules", "usr/share/polkit-1/rules.d/50-polyos-recover.rules", 0o644),
         # the update service (polyos/autoupdate.py): an hourly timer, and check/tonight/now on request
         (data / "polkit/50-polyos-update.rules", "usr/share/polkit-1/rules.d/50-polyos-update.rules", 0o644),
@@ -399,7 +414,6 @@ def cmd_dev(args) -> None:
     if args.live:
         settings_path.unlink(missing_ok=True)  # a live USB starts fresh every boot
     backend = MockBackend(Settings(settings_path), EventBus(), live=args.live)
-    backend.vara.start_scheduler(backend)  # reminders and routines, as in the real shell
     server = Server(backend, ROOT / "ui", secrets.token_urlsafe(24), dev=True, port=args.port)
     server.start()
     url = f"{server.base_url}/"

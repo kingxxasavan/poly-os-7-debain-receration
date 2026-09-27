@@ -422,7 +422,7 @@ def run_default(what: str) -> None:
     candidates = {
         "terminal": [["x-terminal-emulator"], ["xfce4-terminal"], ["xterm"]],
         "files": [["xdg-open", home], ["thunar", home]],
-        "browser": [["x-www-browser"], ["firefox-esr"], ["xdg-open", "https://www.debian.org"]],
+        "browser": [["x-www-browser"], ["google-chrome"], ["chromium"], ["firefox-esr"], ["xdg-open", "https://www.debian.org"]],
     }[what]
     for cmd in candidates:
         if have(cmd[0]):

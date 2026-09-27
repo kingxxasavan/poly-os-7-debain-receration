@@ -5,7 +5,7 @@ PolyOS started as an operating system built in Scratch by AndrewInput and the PI
 real desktop: a PolyOS session that runs on top of Debian and boots on real hardware.
 
 Debian provides the kernel, drivers, Wi-Fi, audio and apps. PolyOS provides everything you see:
-the desktop, dock, Home Menu, launcher, Files, Settings, Task Manager, Driver Manager, the
+the desktop, taskbar, Start menu, Files, Settings, Task Manager, Driver Manager, the
 PolyMarket app store, Ask Vara, the login and lock screen, the boot splash and the PolyOS 7
 installer on the live USB. This edition is presented by Cryptic Software.
 
@@ -77,8 +77,8 @@ website, so Poly Account, check-ins, remote actions and sync can be tried end to
    ```bash
    sudo python3 main.py install
    ```
-   This pulls in Xorg, LightDM, Openbox, picom, PipeWire, NetworkManager, fonts, icons, Firefox
-   ESR, a terminal and a text editor, around 1 GB in total.
+   This pulls in Xorg, LightDM, Openbox, picom, PipeWire, NetworkManager, fonts, icons, a browser
+   (Chromium here; the PolyOS ISO has Google Chrome), a terminal and a text editor, around 1 GB in total.
 4. Reboot. The PolyOS login screen comes up; sign in.
 
 Already have GNOME, Xfce or another desktop? Run `sudo python3 main.py install --shell-only`,
@@ -94,36 +94,38 @@ this step.
 
 | Piece | What it does |
 |---|---|
-| **Installer** | The PolyOS 7 setup on the live USB: "Cryptic Software presents", the falling pinwheel and 7, the crystal welcome, then *Install PolyOS 7* or *Dual boot* (next to Windows or Linux, shrinking it if needed, or *Choose a partition instead* for a D: drive you made; while BitLocker is on it explains how to turn it off first), *Checking your computer* (see Hardware check below), terms, edition, account, dark/light appearance, Wi-Fi and Poly Account (optional), then “Where do you want to install PolyOS?”: like Windows Setup, every drive, partition and unallocated space in one list with Refresh, Delete and New (applied right away, after a confirmation), and PolyOS goes in the partition (erased) or space you pick; *Advanced setup* there sets mount points per partition. Progress, then *Restart now* with the USB drive still in (the firmware is told to start the installed PolyOS next; remove the drive once the screen goes dark). Setup is asked once, all before installing: the installed PolyOS starts straight to the sign-in screen and desktop. Calamares stays as the *Advanced installer* |
+| **Installer** | The PolyOS 7 setup on the live USB: "Cryptic Software presents", the falling pinwheel and 7, the crystal welcome, then *Install PolyOS 7* or *Dual boot* (next to Windows or Linux, shrinking it if needed, or *Choose a partition instead* for a D: drive you made; while BitLocker is on, or while Windows is only asleep because of Fast Startup, it explains how to fix that first, since changing Windows' drive then sends Windows into Automatic Repair), *Checking your computer*, terms, edition, Wi-Fi, **Poly Account** (optional; signed in, *Use this account to sign in* makes your Poly Account name and password this computer's sign-in, like a Microsoft account on Windows), then your account (only the username, computer name and time zone when you use your Poly Account), dark/light appearance, then “Where do you want to install PolyOS?”: like Windows Setup, every drive, partition and unallocated space in one list with Refresh, Delete and New, and PolyOS goes in the partition (erased) or space you pick; *Advanced setup* sets mount points per partition. Progress, then *Restart now* with the USB drive still in. Everything is asked before installing: the installed PolyOS starts straight to the sign-in screen. Calamares stays as the *Advanced installer* |
 | **Custom install** | Choose what every drive and partition is for: erase a drive for PolyOS, your files (/home) or extra storage; or use existing partitions for PolyOS (/), /home (keeping its files), the EFI boot partition, swap, or storage at /mnt/NAME (NTFS drives too). Anything left on *Keep* isn't touched, and a summary lists every erase before you confirm. Impossible choices are refused before anything is erased |
 | **Editions** | *Regular*, *Developer* or *Gaming*, picked while installing; the edition's apps install by themselves after installing, once online, and can be added any time in Settings |
 | **Gaming** | Steam, Bottles (Wine for Windows games), Heroic, Lutris, ProtonUp-Qt, GameMode, Discord; cloud gaming apps (GeForce NOW, Xbox Cloud Gaming, Amazon Luna, Boosteroid) built in and hidden until you switch them on in Settings > Gaming (they open in Chromium, which comes with PolyOS); `vm.max_map_count` raised like SteamOS; **Game Mode**: while a game is full screen, the performance power mode, no idle lock or sleep, slower status polling, background helpers at low priority, and the compositor steps aside |
 | **Developer** | Developer mode: files in `~/.config/polyos/ui/` replace PolyOS's built-in interface files (`css/user.css` is added to every screen), `~/PolyOS-UI` holds a copy of the originals, right-click *Inspect Element* on PolyOS screens, *Reload the interface*. The Developer edition installs Git, build tools, Python with pip, venv and its main libraries (NumPy, pandas, requests, …), Node.js and npm, VS Code and Docker, with Blender and OpenSCAD as options; every PolyOS has Git, pip, venv and build-essential. `polyos-ctl dev off` (Ctrl+Alt+T) undoes a broken change |
-| **Security** | Firewall (ufw) on by default, automatic security updates, a security checkup (firewall, updates, lock screen, recovery key, AppArmor, Secure Boot), lock screen slows down password guessing (a wait after 5 wrong tries, doubling each time) |
+| **Security** | Firewall (ufw) on by default, automatic security updates, a security checkup, and the lock screen slows down guessing. See [Security model](#security-model): the interface is not the boundary; everything done as root goes through `polyos-admin`, which checks every request itself |
 | **Speed** | Compressed RAM swap (zram), SSD trim, capped system log, no waiting for the network at startup, full-screen apps bypass the compositor, one shared event connection for all PolyOS screens |
 | **First start** | Straight to the desktop. What setup chose that needs the internet (the recommended drivers and the edition's apps) installs in the background (polyos-first-start.timer, every 5 minutes until done), with a notification when it starts and when it's all set up |
-| **Dock** | Pinwheel (Home Menu), pinned and running apps, status, clock, launcher grid; right-click an app for Close, Force close and Task Manager |
-| **Home Menu** | PolyOS 7 layout: date and calendar cards, Ask Vara, Run CMD, brightness and volume sliders, pinned and recent apps, power, launcher |
-| **Launcher** | Full-screen paged app grid with search and Pin Apps; technical tools are hidden (Settings > Appearance > Show all apps) |
+| **Dock** | The taskbar: pinwheel (Start), widgets, pinned and running apps, **^** (running apps, including ones in the background like Steam or Discord, with Close and Quit), quick settings, clock; right-click an app for Close, Force close and Task Manager |
+| **Home Menu** | The **Start menu**, laid out like Windows 11's: search (apps, settings and your recent files), *Pinned* (right-click any app to pin it to Start or the taskbar, or put it on the desktop), *All apps* A to Z, *Recommended* (files and apps you opened lately), and you, Ask Vara, Files, Settings and Power (Lock, Sleep, Sign out, Restart, Shut down, and *Restart to Windows* on dual-boot computers). The Windows key and Win+S open it |
+| **Launcher** | Only the everyday apps are listed: of what the PolyOS image ships, Google Chrome (Chromium on ARM), Files, Terminal, Text Editor, Calculator, Photos, Document Viewer, Bluetooth and PolyOS's own; XTerm, screenshot and settings tools stay out (the ISO records its apps in `/usr/share/polyos/base-apps.txt`; apps you install later always show). Settings > Personalization > Show all apps lists everything |
 | **Desktop** | The PolyOS 7 crystal wallpaper with app shortcuts: double-click to open (or single click, in Settings), right-click to pin or remove. Add apps by right-clicking the desktop (*Add apps to the desktop*) or any app in the launcher (*Add to desktop*) |
-| **Desktop menu** | Right-click (or two-finger tap): Add apps to the desktop, Taskbar settings, Personalize, Display settings, Task Manager, Terminal, Files, PolyMarket |
-| **Files** | File manager for the real disk: places, breadcrumbs, grid/list views, thumbnails, search, copy/cut/paste, rename, Trash with restore, properties |
+| **Desktop menu** | Right-click (or two-finger tap): Add apps to the desktop, Taskbar settings, Personalization, Display settings, Task Manager, Terminal, Files, PolyMarket |
+| **Files** | File manager for the real disk: places, breadcrumbs, grid/list views, thumbnails, search, copy/cut/paste, **drag and drop** (onto folders, the places on the left or the Trash; Ctrl copies; between Files windows too), rename, *Set as wallpaper* / *Set as lock screen* for pictures, Trash with restore, properties |
 | **Task Manager** | Apps and processes with CPU and memory, End task and Force close, live CPU/memory/disk/network graphs |
-| **Driver Manager** | Finds NVIDIA, AMD and Intel graphics, Wi-Fi (including Broadcom), Bluetooth and sound hardware, touchscreens and pens (Onboard on-screen keyboard, tilt sensor, Wacom), webcams and the Intel IPU6 cameras of newer laptops (firmware and libcamera), and installs the right drivers and firmware from Debian (only what this Debian has) |
-| **PolyMarket** | Curated store: Chrome, Discord, Spotify, Steam, VS Code, LibreOffice, GIMP, OBS and more from Debian and Flathub |
-| **Settings** | In this order: **Display** (resolution, refresh rate, orientation and main display for every screen, with a 15-second *Keep these settings?* undo; brightness, scale, graphics cards and drivers), **Sound** (output and input devices, volume, microphone level and mute, an *Advanced* button on every section for the full mixer, per-app volume, surround and HDMI profiles), Account, Privacy & Security, Wi-Fi & Network, Appearance, Taskbar & Desktop, Gaming, Vara, then **Apps** (what starts when you sign in, switched on or off, added or removed; uninstall any app with a button, no commands), Power & Performance (power modes, the hardware check and how PolyOS runs, screen-off and sleep timers), Developer (with developer mode on), About |
+| **Driver Manager** | Shows this computer's maker, model and BIOS/UEFI version; **firmware updates from the maker** (BIOS/UEFI, SSDs, docks, touchpads) through fwupd and the Linux Vendor Firmware Service, where Dell, Lenovo, HP and others publish them; and every part (processor with its microcode updates, memory, drives, screens, graphics, Wi-Fi, Bluetooth, sound, touchscreens and pens, webcams and Intel IPU6 cameras) with the right drivers and firmware from Debian |
+| **PolyMarket** | Curated store: Chrome (built in), Discord, Spotify, Steam, VS Code, LibreOffice, GIMP, OBS and more from Debian and Flathub. *Install* several at once: each waits its turn (*Queued*, click to cancel) |
+| **Settings** | In this order: **Display** (resolution, refresh rate, orientation per screen with a 15-second undo; with more than one screen *Duplicate*, *Extend* or one screen, also on Win+P, remembered and set up again whenever a screen is plugged in; brightness, scale, graphics), **Sound**, **Account** (your Poly Account and how you sign in: PIN, password, recovery key), Privacy & Security, Wi-Fi & Network, **Personalization**, Taskbar & Desktop, Gaming, Vara, **Apps** (*Installed apps* with uninstall, *Startup apps*, *Usage*: time in each app today and this week, kept on the computer), **Storage** (how full each drive is, what your folders take, empty the trash, clear thumbnails and downloaded packages), **Power & Performance** (power modes, *When I close the lid* on battery and plugged in, the power button, the hardware check, screen-off and sleep timers), Updates, Developer (with developer mode on), About |
 | **Full screen** | The title bar's middle button, Win+F or *Full screen* in the taskbar's right-click menu shows only the app: no title bar, no taskbar. Nothing pops up over a full-screen app; Win+F (or the app's own F11 or Esc) leaves full screen. Double-click the title bar (or Win+Up) to maximize instead |
 | **Hardware check** | When PolyOS first starts it checks the processor, memory and graphics and says how well the PC fits. Most get *Everything on*; PCs with software graphics get *Smooth* (no blur); 2–3 GB or single-core PCs get *Light*: no blur, shadows or see-through glass, quicker animations, fewer widgets. Change it or check again in Settings > Power & Performance. It also reads the exact model and firmware year (e.g. *Lenovo IdeaPad 5 15ALC05*, no serial number needed), eases off on computers eight or more years old, and recommends *Limit background activity* on small or older laptops (Vara's programs at low priority, fewer status checks and widget refreshes) |
 | **Updates** | Settings > Updates: the update service (a systemd timer) checks every few hours, downloads in the background and installs only at your preferred time (automatic install, or *Install tonight*), with *Install now*, *Check now*, *Ask before restarting* and Stable/Beta/Developer channels, a calm “PolyOS 1.0.0 is ready” notice, and “PolyOS was updated to …” (with *What's new*) once it's running the new version. Every update is **signed**: PolyOS checks the manifest's Ed25519 signature and each package's checksum before installing anything. Works with or without an account; update checks send only the version, channel and architecture. *Update everything* installs Debian's updates. Installed computers that share with Windows get a PolyOS-themed boot menu |
 | **Poly Account** | Optional, never required. Connect during setup or in Settings > Poly Account (sign in, create an account, or a 6-digit code entered at /link), or keep using PolyOS locally with no prompts. Connected computers show up at /account (Dashboard, Devices, Updates, Sync, Security, Privacy, Recovery, Notifications, Account); Poly Sync keeps settings the same; Remote management (restart, lock, install updates from the website) is off until switched on at the computer. Each computer has its own revocable credential and never keeps the password |
 | **Trying it** | On the USB drive, *Try PolyOS first* clears the desktop; *Install PolyOS 7* in the dock and on the desktop goes back to the installer |
-| **Camera** | Photos and videos from the webcam (self-timer, mirror, switch camera), saved to Pictures › Camera. Only listed on computers with a camera |
-| **Vara** | The assistant and AI agent (see [Vara, the agent](#vara-the-agent)): voice ("Hey Vera", or a name of your own like Jarvis), the full-screen HUD, the web, your browser, music, reminders and routines, your documents, code, 3D and robots; simple requests ("open firefox", "volume 40", "turn wifi off") run right on the PC |
-| **Login screen** | PolyOS 7 design over the blurred amethyst crystal: big stacked clock, date, *Performance: Optimal*, news and notification tiles, *Click to Enter Password*, then your name, "Enter your password", *Forgot Password* and *Next*. Falls back to the stock greeter if it can't start |
-| **Lock screen** | Same design; appears instantly (Win+L, the power menu, before sleep, when the screen turns off); unlocks with your password |
+| **Camera** | Photos and videos from the webcam (self-timer, mirror, switch camera), saved to Pictures › Camera. Always in Start; it says so when no camera is connected |
+| **Vara** | AI agent for code, 3D and robots (see [Vara, the agent](#vara-the-agent)); simple requests ("open chrome", "volume 40", "turn wifi off") run right on the PC. Ask Vara from Start or Win+V |
+| **Login screen** | PolyOS 7 design over the blurred amethyst crystal: big stacked clock, date, news and notification tiles, *Click to Enter Password*, then your name and your **PIN or password**. Falls back to the stock greeter if it can't start |
+| **Lock screen** | Same design; appears instantly (Win+L, the power menu, before sleep, when the screen turns off); unlocks with your PIN or password |
 | **Forgot password** | Settings > Account makes a recovery key if you want one (it isn't part of setup any more); with it you set a new password from the login or lock screen |
 | **Widgets** | Win+W or the weather button in the dock: weather (Open-Meteo), calendar, system, BBC news, to-do, notes, photos, world clocks, media controls |
 | **Boot splash** | Spinning pinwheel (Plymouth) |
+| **Boot menu** | Installed PolyOS starts straight away, with no menu to wait on. With Windows too, hold Shift or press Esc while it starts for the menu, or use Start › Power › *Restart to Windows* (it picks Windows for that one start) |
+| **Quick settings** | Wi-Fi, Airplane mode, Energy saver, Night light (warmer colors) and Sound, brightness and volume, and the battery; power and Settings are in Start |
 | **USB boot menu** | PolyOS background, *Start PolyOS 7* and *Start PolyOS 7 (safe mode)*, starts by itself after 5 seconds |
 | **App icons** | Real icons from the Papirus theme for installed apps, PolyMarket and the dev preview |
 
@@ -153,12 +155,6 @@ until the job is done, then sums up. Each step shows in the chat as a card you c
 
 Tools for programs that aren't installed are left out; Vara says which PolyMarket app provides them
 (Blender, OpenSCAD, FreeCAD, KiCad, PrusaSlicer, Cura and the Arduino IDE are there).
-
-**Editions.** The tools above are Vara in every edition. Everything added in 1.2 (the web and its own
-browser, media, reminders and routines, documents, plans, tools it makes, the expert helper, Vara
-Voice, a name of its own and the HUD) is the Developer edition's: it's on when the edition is
-Developer or developer mode is on (Settings > About); `vara_tools.developer()` decides, and
-`CLASSIC_TOOLS` lists what every edition gets.
 
 **Approvals.** Settings > Vara > *Ask before changes*: **Always** (default), **Only outside the
 workspace** (edits inside `~/Projects` need no OK; commands still do) or **Never**. The approval card
@@ -191,57 +187,40 @@ NVIDIA (`meta/llama-3.3-70b-instruct` and the other models on build.nvidia.com),
 through Anthropic's official Python library, with adaptive thinking), or any other OpenAI-compatible
 service with tool calling. Models without tool calling still chat.
 
-**Voice (Vara Voice).** Offered when setting up the Developer edition ("Would you like Vara?"), or
-installed any time from Settings > Vara > Voice (`polyos-admin vara-voice install`, about 150 MB into
-`/opt/polyos/vara-voice`). Say **"Hey Vera"**, or the name you give it in Settings > Vara > *Name*
-("Jarvis" answers to "Hey Jarvis"), then ask. Speech is recognized on the computer (Vosk, offline);
-nothing is sent until the name and a request are heard, and then only the words, as if typed. Answers
-are read out with Piper (espeak-ng as a fallback). **Follow-ups** need no name for a few seconds after
-an answer ("that's all" ends it); **Always listening** (opt-in, with a warning) acts on anything said.
-"Stop" interrupts at any time; "yes", "no" or "always" answers an approval. `Win+Shift+V` is push to
-talk. `polyos/vara_voice.py` runs as its own process, started by the shell to match the settings.
+## Security model
 
-**The HUD.** When it hears its name (or `Win+J`), the assistant's full-screen interface opens: a blue
-arc-reactor circle that turns and glows for listening, thinking and speaking, falling "matrix" glyphs,
-and live panels for the system (processor, memory, battery, network), what it knows (memories,
-preferences, indexed documents, tools), what it's doing (each step as it works) and what's scheduled.
-Type or talk; Esc closes it, and it steps aside by itself after a conversation.
+```
+            PolyOS
+              |
+      +-------+--------+
+      |                |
+  Poly shell       polyos-admin (root)        polkit / sudo / PAM
+  web UI (WebKit)  checks every request        (the password)
+      |                |
+      +-------+--------+
+              |
+        Linux / Debian
+```
 
-**Around the clock.** `set_reminder` and `schedule_routine` (vara_schedule.py): "remind me at 5 to
-call Sam", "every weekday at 8, summarize the news". The shell checks every 20 seconds; reminders are
-shown and spoken, routines run as requests of their own with their answers shown and spoken.
-
-**Knows you, and your files.** Memory notes have a kind (preference, fact, project, person, habit);
-Vara saves the preferences it notices, replaces outdated ones, follows them without being reminded,
-and `recall` searches all of them. It also sees which apps you use and when (only while activity
-history is on). `vara_index.py` keeps a local full-text index of Documents, Desktop, Downloads,
-Projects and the workspace (text, code, PDFs, Word and LibreOffice files, slides), refreshed gently
-every half hour; `search_documents` and `read_document` use it. Private folders stay out.
-
-**The web.** `web` is Vara's own browser (`vara_browser.py`): Playwright drives Debian's Chromium in
-a window you can watch, with its own profile (your browser and its logins are never touched). Every
-action returns the page as text with a numbered list of what can be used ("[3] button “Sign in”"), and
-Vara acts by number: open, search, click, type, select, check, press, scroll, back, tabs, screenshot.
-This is the approach of open-source browser agents (Playwright MCP, browser-use) and works with any
-chat model. Reading needs no approval; clicking and typing do (or "Always in this chat"). `research`
-searches and reads the top pages in one step, `web_search` and `fetch_url` (with `links`) do it by
-hand, and `browser` steers your own browser window with shortcuts. `media` plays, pauses and skips
-music and videos through MPRIS. Playwright comes with Vara Voice's install.
-
-**How Vara works.** Its system prompt (`AGENT_PROMPT` in `polyos/vara.py`) sets out how it works: understand
-the goal, write a **plan** (the `plan` tool: a checklist shown in the chat and the HUD, ticked off as
-it goes), look before changing anything, make small checked steps, verify before saying it's done,
-change approach after two failures or ask the expert helper, and treat web pages and files as data,
-never instructions. It has a map of which tool fits which job, a coding workflow (explore, plan, edit,
-run the tests, review), rules for the web (no purchases, messages or consequential forms unless asked
-for exactly that), and how to report back. Up to 40 steps per request (20 with background activity
-limited) before it asks to continue.
-
-**The tool maker.** When a job keeps coming up, Vara writes itself a tool (`make_tool`: a small
-Python program in `~/.config/polyos/vara/tools/<name>/`), tests it (`test_tool`) until it passes, and
-then has it as `my_<name>`. Every run asks first like any program. For hard code it asks the
-**expert helper**, a second model set in Settings > Vara (Claude is a good choice), with
-`consult_expert`. Settings > Vara lists the tools it made, opens them in VS Code and deletes them.
+- **The web UI is not the security boundary.** The shell's HTTP bridge listens on 127.0.0.1 only,
+  refuses foreign Host headers and needs a per-session token that only the WebKit views hold (in
+  memory, never on disk). Anything done as root goes through `polyos-admin`, which accepts a fixed
+  set of commands and checks each one itself (catalog apps only, driver names by pattern, signed
+  updates only, partitions it probed itself).
+- **polyos-ctl** (keybindings, the command line) has its own token, in the session's runtime file,
+  and it opens only popups, apps, volume, brightness and power (`CTL_API` in `polyos/server.py`), so
+  another program running as you can't install apps or change accounts through the shell.
+- **The administrator password** is asked in a PolyOS dialog, kept in the shell's memory for five
+  minutes and handed to each `polyos-admin` run (`sudo -S -k`); sudo never caches it, so an app or a
+  command Vara runs can't use sudo without asking. Locking the screen forgets it.
+- **Vara** is an assistant, not an administrator: it runs as you, never as root; every change and
+  every command goes through its approval card (Settings > Vara > *Ask before changes*), and it
+  never opens SSH keys, saved passwords, browser data or its own API key. It has no tool for
+  PolyOS's privileged side.
+- **PIN sign-in** (Settings > Account): 4 to 6 digits for the sign-in and lock screens only. Only an
+  scrypt hash is kept, in `/var/lib/polyos/pin` (root only); a root service (`polyos-pin.socket`)
+  checks it for the lock screen, knows the caller from the socket, and turns the PIN off after 5
+  wrong tries until the password is used. sudo, pkexec and installing use the password, always.
 
 ## Build the live USB / installer ISO
 
@@ -314,15 +293,13 @@ settings. The live session changes nothing on the disk until you run the install
 
 | Keys | Action |
 |---|---|
-| Tap `Super` (Windows key) · `Super+Space` | Open or close the Home Menu (type to search) |
-| `Super+S` | App launcher (all apps) |
+| Tap `Super` (Windows key) · `Super+Space` · `Super+S` | Open or close Start (type to search) |
+| `Super+P` | Duplicate, extend or one screen |
 | `Super+R` | Run CMD |
 | `Super+X` | Quick menu: Task Manager, Settings, Files, Driver Manager, PolyMarket, power |
 | `Super+W` | Widgets |
 | `Ctrl+Shift+Esc` · `Ctrl+Alt+Delete` | Task Manager |
 | `Super+V` | Ask Vara |
-| `Super+Shift+V` | Talk to Vara (Vara Voice) |
-| `Super+J` | The assistant's HUD |
 | `Super+A` | Quick settings |
 | Power key | Power Options |
 | `Super+I` | Settings |

@@ -183,3 +183,21 @@ export function searchApps(apps, query) {
   scored.sort((a, b) => a[0] - b[0] || a[1].name.localeCompare(b[1].name));
   return scored.map(([, app]) => app);
 }
+
+// A file's icon: a page with a colored band naming its kind (Files, and the Start menu's Recommended).
+const KIND_STYLE = {
+  image: ['#4fb6a8', 'IMG'], video: ['#d9608f', 'VID'], audio: ['#9b7fe0', 'AUD'], text: ['#8a8f9c', 'TXT'],
+  code: ['#6fbf73', '</>'], pdf: ['#d95c5c', 'PDF'], archive: ['#b0875a', 'ZIP'], package: ['#b0875a', 'DEB'],
+  doc: ['#5b8def', 'DOC'], sheet: ['#3fa86b', 'XLS'], slides: ['#e0894f', 'PPT'], disc: ['#7c8595', 'ISO'],
+  font: ['#8a8f9c', 'Aa'], file: ['#7c8595', ''],
+};
+
+export function fileSvg(kind, name) {
+  const [color, label] = KIND_STYLE[kind] || KIND_STYLE.file;
+  const ext = label || (name.includes('.') ? name.split('.').pop().slice(0, 4).toUpperCase() : '');
+  return '<svg viewBox="0 0 64 64" aria-hidden="true">'
+    + '<path d="M14 6h24l14 14v34a4 4 0 0 1-4 4H14a4 4 0 0 1-4-4V10a4 4 0 0 1 4-4z" fill="#eef0f5"/>'
+    + '<path d="M38 6l14 14H42a4 4 0 0 1-4-4z" fill="#c9ced9"/>'
+    + `<rect x="10" y="38" width="42" height="14" rx="3" fill="${color}"/>`
+    + `<text x="31" y="48.5" text-anchor="middle" font-family="Poppins,Inter,sans-serif" font-size="9" font-weight="700" fill="#fff">${ext.replace(/[<>&]/g, '')}</text></svg>`;
+}

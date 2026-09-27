@@ -1,0 +1,12 @@
+[Unit]
+Description=PolyOS PIN sign-in (lock screen)
+Requires=polyos-pin.socket
+
+[Service]
+ExecStart=/usr/libexec/polyos/polyos-pin serve
+NoNewPrivileges=yes
+ProtectSystem=strict
+StateDirectory=polyos
+ProtectHome=yes
+PrivateTmp=yes
+PrivateNetwork=yes

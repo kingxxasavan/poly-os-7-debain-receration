@@ -1,4 +1,4 @@
-// Ask Vara: the PolyOS assistant and agent (chat popup from the Home Menu).
+// Ask Vara: the PolyOS assistant and agent (chat popup from Start).
 // Vara works in steps (reading files, running commands, rendering models); each shows as a card,
 // and anything that changes files or runs programs waits here for Allow or Deny.
 
@@ -6,12 +6,11 @@ import { api, closePopup, on, openSettings } from '../api.js';
 import { fill, h, icon } from '../ui.js';
 
 const SUGGESTIONS = [
-  'Search the web for today’s top tech news',
-  'Remind me in 10 minutes to stretch',
   'Make a 30 mm cube with a 10 mm hole in OpenSCAD',
+  'What’s in my Projects folder?',
   'Start a Python project that reads a sensor',
+  'Set volume to 40',
 ];
-const VOICE = { listening: 'Listening…', thinking: 'Working on it…', speaking: 'Speaking…' };
 
 const STATUS = { running: 'Working…', waiting: 'Needs your OK', done: 'Done', failed: 'Didn’t work', denied: 'Declined' };
 
@@ -42,44 +41,18 @@ function markdown(text) {
 export default function vara(root) {
   root.classList.add('vara');
   const log = h('div.va-log', { role: 'log', 'aria-live': 'polite' });
-  const input = h('textarea.va-input', { rows: 1, placeholder: 'Ask Vara anything', autofocus: true, 'aria-label': 'Message Vara' });
+  const input = h('textarea.va-input', { rows: 1, placeholder: 'Ask Vara to build, fix or explain something', autofocus: true, 'aria-label': 'Message Vara' });
   const send = h('button.va-send', { title: 'Send', 'aria-label': 'Send' }, icon('arrowRight'));
   const stopBtn = h('button.icon-btn.round.va-stop', { title: 'Stop', 'aria-label': 'Stop', hidden: true, onclick: stop }, icon('stop'));
-  // Vara Voice: push to talk, and what it's doing ("Listening…" with the words as they're heard)
-  const mic = h('button.va-mic', { title: 'Talk to Vara (Win+Shift+V)', 'aria-label': 'Talk to Vara', hidden: true,
-    onclick: () => api.post('/api/vara/voice/listen', {}).catch(() => {}) }, icon('mic'));
-  const voiceBar = h('div.va-voice', { hidden: true, role: 'status' });
-  function showVoice(v) {
-    mic.hidden = !v || !v.running;
-    const label = v && VOICE[v.state];
-    voiceBar.hidden = !label;
-    mic.classList.toggle('on', v?.state === 'listening');
-    if (label) fill(voiceBar, h('span.va-orb', h('i'), h('i'), h('i')), h('b', label), v.text ? h('span', v.text) : null);
-  }
-  let voice = null;
-  const title = h('b', 'Vara');
-  const subtitle = h('small', 'Your PolyOS assistant: apps, code, 3D and robots');
-  // the HUD, voice and a name of its own: the Developer edition's (the server says whether they're on here)
-  const hudBtn = h('button.icon-btn.round', { title: 'Open the HUD (Win+J)', hidden: true,
-    onclick: () => { api.post('/api/hud', { open: true }).catch(() => {}); closePopup(); } }, icon('maximize'));
-  api.get('/api/vara/voice').then((v) => {
-    voice = v;
-    showVoice(v);
-    title.textContent = (v.available && v.name) || 'Vara';
-    hudBtn.hidden = !v.available;
-    if (v.available) subtitle.textContent = 'Your PolyOS assistant: voice, web, apps, code, 3D and robots';
-  }, () => {});
   root.append(
     h('header.va-head',
       h('img.va-logo', { src: '/img/vara.png', alt: '' }),
-      h('div.va-title', title, subtitle),
+      h('div.va-title', h('b', 'Vara'), h('small', 'Your PolyOS agent for code, 3D and robots')),
       stopBtn,
-      hudBtn,
       h('button.icon-btn.round', { title: 'New chat', onclick: reset }, icon('refresh')),
       h('button.icon-btn.round', { title: 'Vara settings', onclick: () => { openSettings('vara'); closePopup(); } }, icon('settings'))),
-    voiceBar,
     log,
-    h('div.va-compose', input, mic, send),
+    h('div.va-compose', input, send),
   );
 
   let state = { history: [], busy: false, pending: null };
@@ -123,9 +96,8 @@ export default function vara(root) {
       fill(log, h('div.va-empty',
         h('img', { src: '/img/vara.png', alt: '' }),
         h('b', 'Hi, I’m Vara.'),
-        h('p', 'I can search the web, drive your browser, play music, set reminders and routines, write and run code, make 3D '
-          + 'models, work with ROS 2 robots and Arduino boards, and handle PolyOS for you. I ask before I change files or run anything.'
-          + (voice?.running ? ' Say “Hey Vera” to talk to me.' : '')),
+        h('p', 'I can write and run code, make 3D models in OpenSCAD and Blender, work with ROS 2 robots and Arduino boards, '
+          + 'and handle PolyOS for you. I ask before I change files or run anything.'),
         h('div.va-chips', SUGGESTIONS.map((s) => h('button.va-chip', { onclick: () => ask(s) }, s)))));
       return;
     }
@@ -133,18 +105,10 @@ export default function vara(root) {
     fill(log,
       ...history.map((m) => {
         if (m.role === 'step') return stepCard(m);
-        if (m.role === 'plan') {
-          const done = m.steps.filter((st) => st.status === 'done').length;
-          return h('div.va-plan', h('div.va-plan-head', icon('check'), h('b', 'Plan'), h('small', `${done} of ${m.steps.length}`)),
-            m.steps.map((st) => h('div.va-plan-step', { class: st.status }, h('i'), h('span', st.step))));
-        }
         if (m.role === 'thought') {
           return h('details.va-thought', h('summary', icon('sparkle'), 'Thinking'), h('p', m.content));
         }
-        if (m.role === 'user') {
-          const badge = { voice: icon('mic'), routine: icon('clock') }[m.source];
-          return h('div.va-msg.me', badge ? h('span.va-source', { title: m.source === 'voice' ? 'Spoken' : 'A routine' }, badge) : null, m.content);
-        }
+        if (m.role === 'user') return h('div.va-msg.me', m.content);
         return h('div.va-msg.vara', { class: [m.error ? 'error' : '', m.interim ? 'interim' : ''].join(' ') }, markdown(m.content));
       }),
       pending ? approvalCard(pending) : null,
@@ -220,7 +184,6 @@ export default function vara(root) {
       requestAnimationFrame(() => { queued = false; refresh(); });
     }),
     on('connected', refresh),
-    on('varaVoice', (e) => { voice = { ...(voice || {}), running: e.state !== 'off', state: e.state, text: e.text }; showVoice(voice); }),
   ];
   refresh();
   return () => offs.forEach((off) => off());

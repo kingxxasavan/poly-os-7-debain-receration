@@ -11,7 +11,7 @@ export default function launcher(root, store, data = {}) {
     type: 'search', placeholder: 'Search apps', autocomplete: 'off', spellcheck: 'false', autofocus: true,
     'aria-label': 'Search apps',
   });
-  if (data.q) input.value = String(data.q).slice(0, 100); // search typed in the Home Menu
+  if (data.q) input.value = String(data.q).slice(0, 100); // search typed elsewhere
   const grid = h('div.lp-grid');
   const dots = h('div.lp-dots');
   const prev = h('button.lp-arrow.prev', { title: 'Previous page' }, icon('chevronLeft'));

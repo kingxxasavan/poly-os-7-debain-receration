@@ -1,0 +1,18 @@
+#!/bin/sh
+# Google Chrome, PolyOS's browser, on Intel/AMD computers (Google doesn't make it for ARM Linux;
+# there Chromium, already in the image, is the browser). Chrome's package adds Google's apt
+# source itself, so the installed system gets Chrome's updates with the rest.
+# If the download fails, the image is still built and Chromium is the browser.
+set -e
+[ "$(dpkg --print-architecture)" = amd64 ] || exit 0
+deb=/tmp/google-chrome-stable_current_amd64.deb
+if wget -q -O "$deb" https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb; then
+    apt-get install -y --no-install-recommends "$deb" || echo "polyos: Google Chrome didn't install; Chromium is the browser" >&2
+else
+    echo "polyos: couldn't download Google Chrome; Chromium is the browser" >&2
+fi
+rm -f "$deb"
+# Chrome is the web browser for x-www-browser too (its own priority already puts it first)
+if [ -x /usr/bin/google-chrome-stable ]; then
+    update-alternatives --set x-www-browser /usr/bin/google-chrome-stable 2>/dev/null || true
+fi

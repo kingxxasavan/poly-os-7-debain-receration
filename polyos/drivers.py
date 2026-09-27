@@ -302,6 +302,8 @@ def scan() -> dict:
     from .power import has_camera
     items = recommend(devices, nvidia, isenkram)
     items += extra_devices(parse_input_devices(_read("/proc/bus/input/devices")), has_camera(), devices, iio_sensors())
+    from .arch import debian_arch
+    items = core_devices(_read("/proc/cpuinfo"), _read("/proc/meminfo"), _disks(), _screens(), debian_arch()) + items
     wanted = sorted({p for it in items for p in it["packages"]})
     if shutil.which("apt-cache") and wanted:  # only what this Debian can actually install
         known = parse_apt_policy(_run(["apt-cache", "policy", *wanted], 30))
@@ -311,4 +313,91 @@ def scan() -> dict:
     have = installed_packages(sorted({p for it in items for p in it["packages"]}))
     for it in items:
         it["missing"] = [p for p in it["packages"] if p not in have]
-    return {"devices": items, "secureBoot": secure_boot()}
+    return {"devices": items, "secureBoot": secure_boot(), "computer": computer_info()}
+
+
+# ---- the rest of the computer: processor, memory, storage, screens ------------------------------
+def computer_info() -> dict:
+    """Maker, model and firmware (BIOS/UEFI) version, from DMI."""
+    from . import hwcheck
+    dmi = hwcheck.read_dmi()
+    model = hwcheck.describe_model(dmi)
+    return {"maker": model["maker"], "model": model["model"], "bios": hwcheck._clean(dmi.get("bios_version", "")),
+            "biosDate": dmi.get("bios_date", ""), "laptop": model["laptop"], "virtual": model["virtual"]}
+
+
+def core_devices(cpuinfo: str, meminfo: str, disks: list[dict], screens: list[str], arch: str) -> list[dict]:
+    """Processor (with its microcode updates), memory, drives and screens. Memory and screens need
+    no drivers on Linux; they're listed so you can see everything was found."""
+    from .hwcheck import parse_cpuinfo
+    out = []
+    cpu = parse_cpuinfo(cpuinfo) or "Processor"
+    vendor = "intel" if "GenuineIntel" in cpuinfo else "amd" if "AuthenticAMD" in cpuinfo else ""
+    micro = {"intel": ["intel-microcode"], "amd": ["amd64-microcode"]}.get(vendor, []) if arch == "amd64" else []
+    out.append({"id": "cpu", "kind": "cpu", "title": cpu, "vendor": vendor.upper() if vendor == "amd" else vendor.title(),
+                "driver": None, "working": True, "packages": micro, "restart": bool(micro),
+                "note": "Security and stability fixes for the processor from its maker, loaded at every start." if micro else None})
+    m = re.search(r"^MemTotal:\s+(\d+) kB", meminfo, re.M)
+    if m:
+        gb = round(int(m.group(1)) / 1024 / 1024)
+        out.append({"id": "memory", "kind": "memory", "title": f"{gb} GB memory", "vendor": "", "driver": "kernel",
+                    "working": True, "packages": [], "restart": False, "note": None})
+    for d in disks:
+        out.append({"id": d["name"], "kind": "storage", "title": d["model"] or d["name"], "vendor": "", "driver": d["driver"],
+                    "working": True, "packages": [], "restart": False, "note": None})
+    for s in screens:
+        out.append({"id": f"screen-{s}", "kind": "screen", "title": s, "vendor": "", "driver": "kernel",
+                    "working": True, "packages": [], "restart": False, "note": None})
+    return out
+
+
+def _disks(root: str = "/sys/block") -> list[dict]:
+    from pathlib import Path
+    out = []
+    for dev in sorted(Path(root).glob("*")):
+        if dev.name.startswith(("loop", "ram", "zram", "dm-", "sr")):
+            continue
+        model = _read(str(dev / "device/model")).strip()
+        kind = "NVMe drive" if dev.name.startswith("nvme") else "Drive"
+        driver = "nvme" if dev.name.startswith("nvme") else "ahci" if dev.name.startswith("sd") else "mmc" if dev.name.startswith("mmc") else ""
+        out.append({"name": dev.name, "model": f"{model} ({kind})" if model else kind, "driver": driver})
+    return out
+
+
+def _screens(root: str = "/sys/class/drm") -> list[str]:
+    from pathlib import Path
+    names = []
+    for status in sorted(Path(root).glob("card*-*/status")):
+        if _read(str(status)).strip() == "connected":
+            conn = status.parent.name.split("-", 1)[1]
+            names.append("Built-in screen" if conn.startswith(("eDP", "LVDS", "DSI")) else f"Screen on {re.sub(r'-A-', '-', conn)}")
+    return names
+
+
+# ---- firmware from the computer's maker (fwupd and the Linux Vendor Firmware Service) ------------
+def parse_fwupd_updates(text: str) -> list[dict]:
+    """Updates from `fwupdmgr get-updates --json`: {device, vendor, current, version, summary, size, urgency}."""
+    import json
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return []
+    out = []
+    for dev in data.get("Devices", []) if isinstance(data, dict) else []:
+        releases = dev.get("Releases") or []
+        if not releases:
+            continue
+        rel = releases[0]
+        out.append({"device": dev.get("Name", "Device"), "vendor": dev.get("Vendor", ""), "current": dev.get("Version", ""),
+                    "version": rel.get("Version", ""), "summary": rel.get("Summary", ""), "size": rel.get("Size") or 0,
+                    "urgency": rel.get("Urgency", ""), "id": dev.get("DeviceId", "")})
+    return out
+
+
+def firmware_updates() -> dict:
+    """What the maker offers for this computer's firmware (BIOS/UEFI, SSD, dock, touchpad...)."""
+    if not shutil.which("fwupdmgr"):
+        return {"available": False, "updates": [], "reason": "Install fwupd to get firmware updates from your computer's maker."}
+    _run(["fwupdmgr", "refresh", "--assume-yes"], 90)  # the newest list from LVFS (a local session may refresh it)
+    text = _run(["fwupdmgr", "get-updates", "--json", "--no-unreported-check", "--no-metadata-check"], 90)
+    return {"available": True, "updates": parse_fwupd_updates(text)}

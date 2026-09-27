@@ -29,15 +29,17 @@ PANEL_HEIGHT = DOCK_HEIGHT + DOCK_MARGIN + 4
 FULLSCREEN_POPUPS = {"launcher", "power"}
 TALL_POPUPS = {"widgets"}  # full height at the left edge, like the Windows widgets board
 POPUP_SIZES = {
-    "start": (400, 596),  # the PolyOS Home Menu
+    "start": (640, 700),  # the Start menu (shorter on small screens)
     "launcher": (0, 0),
     "power": (0, 0),
     "run": (460, 188),
     "vara": (480, 680),
-    "quick": (360, 326),  # the Wi-Fi list asks for more height via the "height" field
+    "quick": (360, 356),  # the Wi-Fi list asks for more height via the "height" field
     "calendar": (320, 390),
     "taskmenu": (240, 200),
     "quickmenu": (264, 468),  # Super+X: the Windows-style quick link menu
+    "project": (340, 330),  # Win+P: duplicate, extend or one screen
+    "tray": (320, 280),  # the taskbar's ^: running apps (the panel asks for the height it needs)
     "widgets": (760, 0),
 }
 RECENT_LIMIT = 6
@@ -50,11 +52,11 @@ RUN_TARGETS = ("terminal", "files", "browser")
 MIXER_TABS = {"playback": 1, "recording": 2, "output": 3, "input": 4, "configuration": 5}  # pavucontrol --tab
 OPEN_APPS = ("settings", "files", "setup", "taskmgr", "drivers", "store", "camera")
 INSTALL_APP = "polyos-install.desktop"  # "Install PolyOS 7": only while trying PolyOS from the USB
-CAMERA_APP = "polyos-camera.desktop"  # listed only when a webcam is connected
+CAMERA_APP = "polyos-camera.desktop"  # the Camera app (it says so when no camera is connected)
 CAMERA_TYPES = {"photo": {"image/jpeg": ".jpg", "image/png": ".png"},
                 "video": {"video/webm": ".webm", "video/mp4": ".mp4"}}
 CAMERA_MAX_BYTES = {"photo": 30 * 1024 * 1024, "video": 1024 * 1024 * 1024}
-# Launcher entries most people never need (Settings > Apps shows them again).
+# Start menu entries most people never need (Settings > Apps shows them again).
 HIDDEN_APPS = {
     "thunar.desktop", "thunar-bulk-rename.desktop", "thunar-settings.desktop", "thunar-volman-settings.desktop",
     "org.xfce.thunar.desktop", "pavucontrol.desktop", "org.pulseaudio.pavucontrol.desktop", "arandr.desktop",
@@ -70,12 +72,51 @@ HIDDEN_APPS = {
     "info.desktop", "bssh.desktop", "bvnc.desktop", "avahi-discover.desktop", "jconsole.desktop",
     "policytool.desktop", "gcr-prompter.desktop", "gcr-viewer.desktop", "org.gnome.seahorse.Application.desktop",
     "firefox-esr-safe.desktop", "nm-applet.desktop", "xfce4-about.desktop", "org.xfce.volman.desktop",
+    "xfce4-screenshooter.desktop", "org.xfce.screenshooter.desktop", "cmatrix.desktop", "blueman-adapters.desktop",
+    "org.gnome.Evince-previewer.desktop", "calamares-install-debian.desktop",
+    "yad-icon-browser.desktop", "gnome-disk-image-mounter.desktop", "gnome-disk-image-writer.desktop",
+    "org.gnome.Tecla.desktop", "python3.12.desktop", "python3.14.desktop", "ipython3.desktop", "org.xfce.mousepad-settings.desktop",
 }
+# Of the apps the PolyOS image brings along, the Start menu lists these (and PolyOS's own); the
+# image records every app it ships in BASE_APPS_FILE, so the rest (XTerm, Screenshot, helpers and
+# settings tools) stay out of the way. Apps installed later always show. Settings > Apps >
+# "Show all apps" lists everything.
+BASE_APPS_FILE = Path("/usr/share/polyos/base-apps.txt")
+BASE_SHOWN = {
+    "google-chrome.desktop", "chromium.desktop", "firefox-esr.desktop", "xfce4-terminal.desktop",
+    "org.xfce.mousepad.desktop", "org.gnome.Evince.desktop",
+    "org.xfce.ristretto.desktop", "org.gnome.Calculator.desktop", "blueman-manager.desktop",
+}
+
+
+def base_apps(path: Path = BASE_APPS_FILE) -> set[str]:
+    try:
+        return {line.strip() for line in path.read_text("utf-8").splitlines() if line.strip().endswith(".desktop")}
+    except OSError:
+        return set()
+
+
+def app_hidden(app_id: str, base: set[str]) -> bool:
+    """Left out of the Start menu (unless "Show all apps" is on)."""
+    if app_id in HIDDEN_APPS:
+        return True
+    return app_id in base and app_id not in BASE_SHOWN and not app_id.startswith("polyos-")
+
+
+def supersede_browsers(apps: list[dict], base: set[str]) -> None:
+    """Chrome is the browser: the image's Chromium (kept for cloud gaming) stays out of sight next to it."""
+    if any(a["id"] == "google-chrome.desktop" for a in apps):
+        for a in apps:
+            if a["id"] == "chromium.desktop" and a["id"] in base:
+                a["hidden"] = a["superseded"] = True
+
+
 # Friendlier names for Debian's default apps.
 DISPLAY_NAMES = {
-    "firefox-esr.desktop": "Firefox", "org.xfce.mousepad.desktop": "Text Editor", "xfce4-terminal.desktop": "Terminal",
-    "org.xfce.ristretto.desktop": "Image Viewer", "xfce4-screenshooter.desktop": "Screenshot",
-    "blueman-manager.desktop": "Bluetooth", "org.gnome.Evince.desktop": "Documents",
+    "firefox-esr.desktop": "Firefox", "chromium.desktop": "Chromium", "org.xfce.mousepad.desktop": "Text Editor", "xfce4-terminal.desktop": "Terminal",
+    "org.xfce.ristretto.desktop": "Photos", "xfce4-screenshooter.desktop": "Screenshot",
+    "blueman-manager.desktop": "Bluetooth", "org.gnome.Evince.desktop": "Document Viewer",
+    "org.gnome.Calculator.desktop": "Calculator", "org.gnome.FileRoller.desktop": "Archive Manager",
 }
 # Clicking the button that opened a popup first blurs it (closing it) and then
 # toggles it again; ignore a reopen of the same popup this soon after a close.
@@ -189,15 +230,156 @@ class Backend:
             "popup": self._popup,
         }
 
+    # ---- dual boot: Start › Power › Restart to Windows ---------------------------------------------
+    def windows_installed(self) -> bool:
+        """Windows is in the boot menu (/boot/grub/grub.cfg is readable by everyone)."""
+        from .admin import windows_entry
+        try:
+            return windows_entry(Path("/boot/grub/grub.cfg").read_text("utf-8", errors="replace")) is not None
+        except OSError:
+            return False
+
+    def restart_to_windows(self) -> dict:
+        if not self.windows_installed():
+            raise ApiError("Windows isn't on this computer's boot menu.", 404)
+        proc = subprocess.run(["systemctl", "start", "--no-block", "polyos-restart-windows.service"], capture_output=True,
+                              text=True, timeout=20)
+        if proc.returncode != 0:
+            raise ApiError("Couldn't restart into Windows.", 500)
+        return {"ok": True}
+
+    def notify(self, title: str, body: str) -> None:
+        """A plain desktop notification."""
+        from . import system
+        if system.have("notify-send"):
+            system.spawn(["notify-send", "-a", "PolyOS", "-i", "polyos", title, body])
+
+    # ---- Settings > Storage -------------------------------------------------------------------
+    def storage(self) -> dict:
+        from . import storage
+        try:
+            apt_cache = sum(f.stat().st_size for f in Path("/var/cache/apt/archives").glob("*.deb"))
+        except OSError:
+            apt_cache = 0
+        return {"drives": storage.drives(), "folders": storage.breakdown(self.files.home), "packageCache": apt_cache}
+
+    def storage_clean(self, what: str) -> dict:
+        from . import storage
+        if what == "thumbnails":
+            return {"freed": storage.clear_thumbnails(self.files.home)}
+        if what == "trash":
+            self.files_empty_trash()
+            return {"freed": None}
+        if what == "packages":
+            return self.jobs.start("clean", "Deleting downloaded packages", ["clean-packages"], target="packages")
+        raise ApiError("Unknown clean-up.")
+
+    # ---- Settings > Power & Performance: the lid and the power button ---------------------------
+    def power_keys(self) -> dict:
+        from . import power
+        return {**power.power_keys(), "hasLid": power.has_lid(), "actions": power.KEY_ACTIONS}
+
+    def power_keys_set(self, lid: str, plugged: str, button: str) -> dict:
+        from . import power
+        power.logind_text(lid, plugged, button)  # checks the choices before asking for the password
+        return self.jobs.start("power-keys", "Saving power button and lid settings", ["power-keys", lid, plugged, button],
+                               target="power-keys")
+
+    # ---- Settings > Apps > Usage: time with each app in front, per day (kept two weeks, on this computer)
+    USAGE_DAYS = 14
+
+    def _usage_path(self) -> Path:
+        return self.settings.path.parent / "usage.json"
+
+    def usage_tick(self, app_id: str | None, seconds: float) -> None:
+        if not app_id or seconds <= 0 or not self.settings.get("keepRecent"):
+            return
+        import datetime
+        path = self._usage_path()
+        try:
+            data = json.loads(path.read_text("utf-8"))
+            data = data if isinstance(data, dict) else {}
+        except (OSError, ValueError):
+            data = {}
+        day = datetime.date.today().isoformat()
+        today = data.setdefault(day, {})
+        today[app_id] = round(today.get(app_id, 0) + seconds)
+        for old in sorted(data)[:-self.USAGE_DAYS]:
+            data.pop(old, None)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(data), "utf-8")
+        os.replace(tmp, path)
+
+    def usage(self) -> dict:
+        import datetime
+        try:
+            data = json.loads(self._usage_path().read_text("utf-8"))
+        except (OSError, ValueError):
+            data = {}
+        today = datetime.date.today()
+        week = {(today - datetime.timedelta(days=i)).isoformat() for i in range(7)}
+        names = {a["id"]: a for a in self.apps()}
+        totals: dict[str, dict] = {}
+        for day, apps in data.items():
+            for app_id, secs in (apps or {}).items():
+                t = totals.setdefault(app_id, {"today": 0, "week": 0})
+                if day == today.isoformat():
+                    t["today"] += secs
+                if day in week:
+                    t["week"] += secs
+        rows = [{"id": i, "name": names[i]["name"] if i in names else i.removesuffix(".desktop"),
+                 "icon": names[i]["icon"] if i in names else f"/icon/app/{i}", **t} for i, t in totals.items() if t["week"]]
+        days = [{"day": (today - datetime.timedelta(days=i)).isoformat(),
+                 "seconds": sum((data.get((today - datetime.timedelta(days=i)).isoformat()) or {}).values())} for i in range(6, -1, -1)]
+        return {"apps": sorted(rows, key=lambda r: -r["week"]), "days": days, "on": bool(self.settings.get("keepRecent"))}
+
+    def usage_clear(self) -> dict:
+        self._usage_path().unlink(missing_ok=True)
+        return self.usage()
+
+    # ---- the Start menu and the taskbar's ^ ------------------------------------------------------
+    def recent_files(self) -> list[dict]:
+        from .files import recent_files
+        return recent_files(self.files.home)
+
+    def _exe_index(self) -> dict[str, str]:
+        """Program name -> app id, for apps that keep running without a window (the shell fills it in)."""
+        return {}
+
+    def background_apps(self) -> list[dict]:
+        """Apps running without a window of their own (Discord or Steam in the background), for the taskbar's ^."""
+        from . import procs
+        index = self._exe_index()
+        if not index:
+            return []
+        apps = {a["id"]: a for a in self.apps() if not a.get("hidden")}
+        with_windows = {w.get("appId") for w in self.windows()}
+        found: dict[str, dict] = {}
+        for pid, names in procs.user_processes():
+            app_id = next((index[n.lower()] for n in names if n.lower() in index), None)
+            if app_id and app_id in apps and app_id not in with_windows and app_id not in found \
+                    and not app_id.startswith("polyos-"):
+                found[app_id] = {"appId": app_id, "name": apps[app_id]["name"], "icon": apps[app_id]["icon"], "pid": pid}
+        return sorted(found.values(), key=lambda a: a["name"].casefold())
+
+    def end_background_app(self, app_id: str) -> dict:
+        """Quit an app running in the background: its processes get a polite SIGTERM."""
+        from . import procs
+        index = self._exe_index()
+        pids = [pid for pid, names in procs.user_processes() if any(index.get(n.lower()) == app_id for n in names)]
+        if not pids:
+            raise ApiError("That app isn't running.", 404)
+        for pid in pids:
+            try:
+                os.kill(pid, 15)
+            except OSError:
+                pass
+        return {"ok": True}
+
     def note_launch(self, app_id: str) -> None:
-        """Remember an opened app for the Start menu's Recent list (and Vara's sense of your habits)."""
+        """Remember an opened app for the Start menu's Recent list."""
         if not self.settings.get("keepRecent"):
             return
-        try:
-            name = next((a["name"] for a in self.apps() if a["id"] == app_id), app_id.removesuffix(".desktop"))
-            self.vara.habits.opened(name)
-        except (OSError, KeyError, ValueError):
-            pass
         recent = [a for a in self.settings.get("recent") if a != app_id]
         try:
             self.update_settings({"recent": [app_id, *recent][:RECENT_LIMIT]})
@@ -332,6 +514,42 @@ class Backend:
         self._account_request({"password": password})
         return {"ok": True}
 
+    # ---- PIN sign-in (polyos/pin.py): set with your password, checked by a root service -----------
+    def pin_status(self) -> dict:
+        from . import pin
+        try:
+            return {**pin.ask({"op": "status"}), "available": True}
+        except (OSError, ValueError):
+            return {"set": False, "blocked": False, "available": False}
+
+    def pin_set(self, password: str, new_pin: str | None) -> dict:
+        from . import pin
+        if new_pin is not None and not pin.valid(new_pin):
+            raise ApiError("A PIN is 4 to 6 digits.")
+        if not password:
+            raise ApiError("Enter your password first.")
+        self.jobs.admin.authenticate(password)  # the PIN is set (or removed) only with the password
+        self._account_request({"pin": new_pin})
+        return self.pin_status()
+
+    def pin_unlock(self, secret: str) -> bool:
+        """The lock screen: a PIN, checked by the PIN service (it counts wrong tries, as root)."""
+        from . import pin
+        if not pin.valid(secret):
+            return False
+        try:
+            return bool(pin.ask({"op": "verify", "pin": secret}).get("ok"))
+        except (OSError, ValueError):
+            return False
+
+    def pin_reset(self) -> None:
+        """Signed in or unlocked with the password: the PIN works again after too many wrong tries."""
+        from . import pin
+        try:
+            pin.ask({"op": "reset"}, timeout=3)
+        except (OSError, ValueError):
+            pass
+
     def account_recovery_key(self):
         from .recovery import generate
 
@@ -344,6 +562,12 @@ class Backend:
         return {"key": key}
 
     # ---- Driver Manager ------------------------------------------------------------------
+    def firmware_status(self) -> dict:
+        return drivers.firmware_updates()
+
+    def firmware_install(self) -> dict:
+        return self.jobs.start("drivers", "Updating firmware", ["firmware"], target="firmware")
+
     def drivers_scan(self) -> dict:
         result = drivers.scan()
         self._driver_packages = {p for d in result["devices"] for p in d["packages"]}
@@ -375,7 +599,7 @@ class Backend:
             raise ApiError(f"{app['name']} is part of PolyOS and can't be removed.")
         verb = "Installing" if action == "install" else "Removing"
         return self.jobs.start("store", f"{verb} {app['name']}", ["store", action, app_id], target=app_id,
-                               on_done=lambda job: self.bus.publish("store"))
+                               on_done=lambda job: self.bus.publish("store"), queue=True)
 
     def store_open(self, app_id: str):
         app = self._store_app(app_id)
@@ -527,6 +751,8 @@ class Backend:
             saved = {k: {**v, "primary": False} for k, v in saved.items()}
         saved[name] = {"size": size, "rate": rate, "rotation": rotation or "normal", "primary": primary}
         self.update_settings({"displays": saved})
+        if self.settings.get("nightLight"):
+            self.apply_night_light()
         return self.displays_list()
 
     def apply_saved_displays(self) -> None:
@@ -542,6 +768,57 @@ class Backend:
             except ValueError:
                 continue
             system.run(display.command(name, cfg.get("size"), cfg.get("rate"), cfg.get("rotation"), cfg.get("primary")), 15)
+        if self.settings.get("nightLight"):
+            self.apply_night_light()  # a new mode can reset the gamma
+
+    def monitors(self) -> list[dict]:
+        """Each screen's place on the desktop (the shell knows; the desktop draws a wallpaper on each)."""
+        return []
+
+    def apply_display_layout(self) -> dict:
+        """Every connected screen on, arranged the way Settings (or Win+P) says: at start, and whenever a
+        screen is plugged in or out. Each screen's own resolution, rate and orientation are kept."""
+        from . import display, system
+        if not system.have("xrandr"):
+            return {"ok": False}
+        rc, out = system.run(["xrandr", "--query"], 15)
+        if rc != 0:
+            return {"ok": False}
+        outputs = display.parse_xrandr(out)
+        cmd = display.layout_command(outputs, self.settings.get("displayMode"), self.settings.get("displays") or {},
+                                     display.still_on(out))
+        if cmd:
+            rc, err = system.run(cmd, 20)
+            if rc != 0:
+                log.warning("screen layout failed: %s", err.strip()[-300:])
+                # something in the arrangement didn't take: at least every screen on, side by side
+                system.run(display.layout_command(outputs, "extend", {}, display.still_on(out)), 20)
+        if self.settings.get("nightLight"):
+            self.apply_night_light()
+        return {"ok": True, "screens": len(outputs)}
+
+    def display_mode_set(self, mode: str) -> dict:
+        from . import display
+        if mode not in display.MODES:
+            raise ApiError("Choose Duplicate, Extend or one screen.")
+        self.update_settings({"displayMode": mode})
+        return self.apply_display_layout()
+
+    def apply_night_light(self) -> None:
+        """Night light on or off on every screen (at start, when it's switched, and after a screen change)."""
+        from . import display, system
+        if not system.have("xrandr"):
+            return
+        for cmd in display.night_light_commands(self.displays_list()["outputs"], bool(self.settings.get("nightLight"))):
+            system.run(cmd, 10)
+
+    def apply_airplane(self, on: bool) -> None:
+        """Airplane mode: NetworkManager's radios (Wi-Fi and mobile broadband) and Bluetooth, off or on."""
+        from . import system
+        if system.have("nmcli"):
+            system.run(["nmcli", "radio", "all", "off" if on else "on"], 10)
+        if system.have("bluetoothctl"):
+            system.run(["bluetoothctl", "power", "off" if on else "on"], 10)
 
     # ---- updates (Settings > Updates; the update service itself is polyos/autoupdate.py) ----------
     def _is_live(self) -> bool:
@@ -628,8 +905,7 @@ class Backend:
         names = {"gaming": "Gaming apps", "developer": "Developer tools"}
         if firststart.pending(plan) and not seen.get("firstStart"):
             seen["firstStart"] = True
-            parts = [x for x in (names.get(plan.get("pack")), "recommended drivers" if plan.get("drivers") else None,
-                                 "Vara Voice" if plan.get("vara") else None) if x]
+            parts = [x for x in (names.get(plan.get("pack")), "recommended drivers" if plan.get("drivers") else None) if x]
             return {"kind": "setting-up", "title": "Finishing setting up PolyOS",
                     "body": f"Your {' and '.join(parts)} are installing in the background (once you’re online). "
                             "You can use PolyOS in the meantime."}
@@ -638,10 +914,9 @@ class Backend:
             if st["state"] == "failed":
                 return {"kind": "setting-up", "title": "Some things didn’t install",
                         "body": "Install them from Settings › Apps and Settings › Drivers when you’re online."}
-            done = [x for x in (names.get(st.get("packDone")), "drivers" if st.get("drivers") == "done" else None,
-                                "Vara Voice (say “Hey Vera”)" if st.get("varaDone") else None) if x]
+            done = [x for x in (names.get(st.get("packDone")), "drivers" if st.get("drivers") == "done" else None) if x]
             return {"kind": "setting-up", "title": "PolyOS is all set up",
-                    "body": f"Installed: {', '.join(done) or 'your apps'}."
+                    "body": f"Your {' and '.join(done) or 'apps'} are installed."
                             + (" Restart when it suits you to start using the new drivers." if st.get("drivers") == "done" else "")}
         return None
 
@@ -1047,212 +1322,6 @@ class Backend:
             except Exception:  # noqa: BLE001 - the chat still shows the request when opened
                 log.debug("couldn't open Vara for an approval", exc_info=True)
 
-    # ---- Vara Voice (vara_voice.py): a process of its own, following the settings ----------------
-    def notify(self, title: str, body: str) -> None:
-        """A plain desktop notification (reminders)."""
-        from . import system
-        if system.have("notify-send"):
-            system.spawn(["notify-send", "-a", "PolyOS", "-i", "polyos", title, body])
-
-    def assistant_names(self) -> dict:
-        """What the assistant is called on screen ("Vara", or "Jarvis") and the word it answers to."""
-        from . import vara_voice
-        own = (self.settings.get("assistantName") or "").strip()
-        return {"display": own or "Vara", "wake": vara_voice.clean_name(own) if own else vara_voice.DEFAULT_NAME}
-
-    def vara_extras(self) -> bool:
-        """Vara's 1.2 features (voice, the HUD, the web, reminders, documents, tool making): the Developer edition's."""
-        from .vara_tools import developer
-        return developer(self.settings)
-
-    def vara_voice_status(self) -> dict:
-        from . import vara_voice
-        proc = getattr(self, "_voice_proc", None)
-        names = self.assistant_names()
-        return {"available": self.vara_extras(), "installed": self._voice_installed(), "enabled": bool(self.settings.get("varaVoice")),
-                "wake": bool(self.settings.get("varaVoiceWake")), "speak": bool(self.settings.get("varaVoiceSpeak")),
-                "followUp": bool(self.settings.get("varaVoiceFollowUp")), "openMic": bool(self.settings.get("varaVoiceOpenMic")),
-                "hud": bool(self.settings.get("varaHud")), "name": names["display"],
-                "running": bool(proc is not None and proc.poll() is None), "wakeWords": f"Hey {names['wake'].title()}",
-                **getattr(self, "_voice_state", {"state": "off", "text": ""}), "home": str(vara_voice.VOICE_HOME)}
-
-    def _voice_installed(self) -> bool:
-        from . import vara_voice
-        return vara_voice.installed()
-
-    def vara_voice_state(self, state: str, text: str = "") -> dict:
-        """From the voice process: listening, thinking, speaking or idle (the Vara chat shows it)."""
-        if state not in ("idle", "listening", "thinking", "speaking"):
-            raise ApiError("Unknown voice state.")
-        before = getattr(self, "_voice_state", {}).get("state")
-        self._voice_state = {"state": state, "text": text[:300]}
-        self.bus.publish("varaVoice", **self._voice_state)
-        # "Hey Vera": the HUD (or the Vara panel) shows it listening, unless a full-screen app is in front
-        if state == "listening" and before != "listening" and not getattr(self, "_fullscreen_app", False):
-            if self.settings.get("varaHud") and self.vara_extras():
-                if not getattr(self, "_hud_open", False):
-                    self.hud(True)
-            elif (self._popup or {}).get("view") != "vara":
-                try:
-                    self.popup_request("vara")
-                except ApiError:
-                    pass
-        return self._voice_state
-
-    def vara_voice_listen(self) -> dict:
-        """Push to talk (Win+Shift+V, or the microphone button in the Vara chat)."""
-        if not self.vara_voice_status()["running"]:
-            raise ApiError("Turn on Vara Voice in Settings › Vara first.", 409)
-        self.vara.announce("", "listen")
-        return {"ok": True}
-
-    def vara_voice_install(self) -> dict:
-        if not self.vara_extras():
-            raise ApiError("Vara Voice comes with the Developer edition. Turn on developer mode in Settings › About first.", 403)
-
-        def done(job):
-            if job["state"] == "done":
-                self.update_settings({"varaVoice": True})
-            self.bus.publish("varaVoice", **getattr(self, "_voice_state", {"state": "off", "text": ""}))
-        return self.jobs.start("vara-voice", "Installing Vara Voice", ["vara-voice", "install"], target="vara-voice", on_done=done)
-
-    def sync_vara_voice(self) -> None:
-        """Start, stop or restart the voice process to match the settings (and bring it back if it quit)."""
-        from . import vara_voice
-        want = (bool(self.settings.get("varaVoice")) and self.vara_extras() and self._voice_installed()
-                and not self._is_live())
-        args = [str(vara_voice.PYTHON), "-m", "polyos.vara_voice", "--name", self.assistant_names()["wake"],
-                *([] if self.settings.get("varaVoiceSpeak") else ["--quiet"]),
-                *([] if self.settings.get("varaVoiceWake") else ["--no-wake"]),
-                *([] if self.settings.get("varaVoiceFollowUp") else ["--no-follow-up"]),
-                *(["--open-mic"] if self.settings.get("varaVoiceOpenMic") else [])]
-        proc = getattr(self, "_voice_proc", None)
-        running = proc is not None and proc.poll() is None
-        if running and (not want or getattr(self, "_voice_args", None) != args):
-            proc.terminate()
-            try:
-                proc.wait(5)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-            running = False
-            self._voice_state = {"state": "off", "text": ""}
-            self.bus.publish("varaVoice", **self._voice_state)
-        if want and not running:
-            self._stop_stray_voice()
-            log_path = paths.state_dir() / "vara-voice.log"
-            env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parent.parent)}
-            with open(log_path, "ab") as log_file:
-                self._voice_proc = subprocess.Popen(args, env=env, stdin=subprocess.DEVNULL, stdout=log_file,
-                                                    stderr=subprocess.STDOUT, start_new_session=True)
-            self._voice_args = args
-            (paths.runtime_dir() / "vara-voice.pid").write_text(str(self._voice_proc.pid))
-
-    def stop_vara_voice(self) -> None:
-        """When the shell exits (a restart starts a new one)."""
-        proc = getattr(self, "_voice_proc", None)
-        if proc is not None and proc.poll() is None:
-            proc.terminate()
-        (paths.runtime_dir() / "vara-voice.pid").unlink(missing_ok=True)
-
-    def _stop_stray_voice(self) -> None:
-        """One left by a shell that crashed: only ever one Vara listening."""
-        pid_file = paths.runtime_dir() / "vara-voice.pid"
-        try:
-            pid = int(pid_file.read_text().strip())
-            cmdline = Path(f"/proc/{pid}/cmdline").read_bytes()
-        except (OSError, ValueError):
-            return
-        if b"polyos.vara_voice" in cmdline:
-            try:
-                os.kill(pid, 15)
-            except OSError:
-                pass
-
-    def vara_tool_open(self, name: str) -> dict:
-        """A tool Vara made: its folder in VS Code (or Files)."""
-        from . import system, vara_toolmaker
-        folder = vara_toolmaker.tools_dir(self.vara.home) / name
-        if not vara_toolmaker.NAME.match(name) or not folder.is_dir():
-            raise ApiError("That tool doesn't exist.", 404)
-        if system.have("code"):
-            system.spawn(["code", str(folder)])
-        else:
-            self.open_path(str(folder))
-        return {"ok": True}
-
-    def vara_index_rebuild(self) -> dict:
-        self.vara.index.clear()
-        threading.Thread(target=lambda: self.vara.index.update(self.vara.index.roots([self.vara.workspace()]), budget=600,
-                                                                max_files=5000), daemon=True).start()
-        return self.vara.index.stats()
-
-    # ---- the HUD: the assistant's full-screen interface -------------------------------------------
-    def hud(self, show: bool) -> dict:
-        """Open or close the HUD (it opens by itself when the assistant hears its name, if Settings allows)."""
-        if show and not self.vara_extras():
-            raise ApiError("The HUD comes with the Developer edition. Turn on developer mode in Settings › About first.", 403)
-        self._hud_open = bool(show)
-        self._show_hud(self._hud_open)
-        self.bus.publish("hud", open=self._hud_open)
-        return {"open": self._hud_open}
-
-    def _show_hud(self, show: bool) -> None:
-        pass  # the desktop shell puts a full-screen window up (shell.py)
-
-    def _cpu_percent(self) -> float | None:
-        """Busy share of the processor since the last call (from /proc/stat)."""
-        try:
-            fields = [int(x) for x in Path("/proc/stat").read_text().split("\n", 1)[0].split()[1:]]
-        except (OSError, ValueError):
-            return None
-        idle, total = fields[3] + (fields[4] if len(fields) > 4 else 0), sum(fields)
-        before = getattr(self, "_cpu_sample", None)
-        self._cpu_sample = (idle, total)
-        if not before or total == before[1]:
-            return None
-        return round(100 * (1 - (idle - before[0]) / (total - before[1])), 1)
-
-    def hud_data(self) -> dict:
-        """Everything the HUD shows, in one call (it polls every couple of seconds while open)."""
-        from .vara_tools import TOOLS, custom_tools
-        mem = None
-        try:
-            info = {}
-            for line in Path("/proc/meminfo").read_text().splitlines():
-                key, _, rest = line.partition(":")
-                if key in ("MemTotal", "MemAvailable"):
-                    info[key] = int(rest.split()[0])
-            mem = round(100 * (1 - info["MemAvailable"] / info["MemTotal"]), 1)
-        except (OSError, KeyError, ValueError, IndexError, ZeroDivisionError):
-            pass
-        try:
-            uptime = int(float(Path("/proc/uptime").read_text().split()[0]))
-        except (OSError, ValueError, IndexError):
-            uptime = None
-        try:
-            status = self.system_status()
-        except Exception:  # noqa: BLE001 - the HUD shows what it can
-            status = {}
-        state = self.vara.state()
-        history = state["history"]
-        last_user = next((h["content"] for h in reversed(history) if h["role"] == "user"), "")
-        last_reply = next((h["content"] for h in reversed(history) if h["role"] == "assistant" and not h.get("interim")), "")
-        notes = self.vara.memory.notes()
-        return {
-            "name": self.assistant_names()["display"], "wake": self.assistant_names()["wake"],
-            "cpu": self._cpu_percent(), "memory": mem, "uptime": uptime, "cores": os.cpu_count(),
-            "battery": status.get("battery"), "network": status.get("network"), "volume": status.get("volume"),
-            "voice": self.vara_voice_status(), "busy": state["busy"], "pending": state["pending"],
-            "steps": [{"title": h["title"], "status": h["status"], "icon": h.get("icon")}
-                      for h in history if h["role"] == "step"][-6:],
-            "you": last_user[:300], "reply": last_reply[:600],
-            "plan": next((h["steps"] for h in reversed(history) if h["role"] == "plan"), []),
-            "scheduled": self.vara.schedule.items()[:6],
-            "knowledge": {"notes": len(notes), "preferences": sum(1 for n in notes if n.get("kind") == "preference"),
-                          "documents": self.vara.index.stats()["files"],
-                          "tools": len(TOOLS) + len(custom_tools(self.vara.home)), "skills": len(self.vara.skills.list())},
-        }
-
     def vara_test(self) -> dict:
         reply = complete(self.vara.config.load(), [{"role": "user", "content": "Reply with just the word: ready"}], timeout=60)
         return {"ok": True, "reply": reply[:200]}
@@ -1260,14 +1329,10 @@ class Backend:
     def update_settings(self, patch: dict) -> dict:
         if isinstance(patch, dict) and patch.get("keepRecent") is False:
             patch = {**patch, "recent": []}  # turning activity history off forgets it too
-            self.vara.habits.clear()
-        if isinstance(patch, dict) and patch.get("varaIndex") is False:
-            self.vara.index.clear()  # turning document search off forgets the index too
+            self._usage_path().unlink(missing_ok=True)
         settings = self.settings.update(patch)
         self.bus.publish("settings", settings=settings)
         self._pa_push(patch)  # Poly Sync, when connected
-        if {"varaVoice", "varaVoiceWake", "varaVoiceSpeak", "varaVoiceFollowUp", "varaVoiceOpenMic", "assistantName"} & set(patch):
-            self.sync_vara_voice()
         return settings
 
     def wallpapers(self) -> list[dict]:

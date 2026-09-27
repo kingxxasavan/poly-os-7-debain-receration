@@ -1,0 +1,9 @@
+#!/usr/bin/python3 -I
+"""PIN sign-in (runs as root): `check` for the sign-in screen's PAM, `serve` for polyos-pin.socket."""
+import sys
+
+sys.path.insert(0, "/usr/lib/polyos")
+
+from polyos.pin import main  # noqa: E402
+
+sys.exit(main())

@@ -1,12 +1,14 @@
-// Driver Manager: finds graphics, Wi-Fi, Bluetooth and audio hardware and installs the drivers
-// and firmware that make it work best (NVIDIA, AMD, Intel, Broadcom, ...).
+// Driver Manager: this computer's maker and model, firmware updates from that maker (fwupd/LVFS), and
+// every part (processor, graphics, Wi-Fi, sound, drives, screens...) with the drivers that make it work best.
 
 import { watchJobs, withAdmin } from '../admin.js';
 import { api, power } from '../api.js';
 import { fill, h, icon } from '../ui.js';
 
-const KIND_ICON = { graphics: 'monitor', wifi: 'wifi', bluetooth: 'bluetooth', audio: 'volume', network: 'ethernet', firmware: 'chip', touch: 'brush', camera: 'camera' };
-const KIND_LABEL = { graphics: 'Graphics', wifi: 'Wi-Fi', bluetooth: 'Bluetooth', audio: 'Sound', network: 'Network', firmware: 'Firmware', touch: 'Touch and pen', camera: 'Camera' };
+const KIND_ICON = { graphics: 'monitor', wifi: 'wifi', bluetooth: 'bluetooth', audio: 'volume', network: 'ethernet', firmware: 'chip', touch: 'brush', camera: 'camera',
+  cpu: 'chip', memory: 'memory', storage: 'disk', screen: 'laptop' };
+const KIND_LABEL = { graphics: 'Graphics', wifi: 'Wi-Fi', bluetooth: 'Bluetooth', audio: 'Sound', network: 'Network', firmware: 'Firmware', touch: 'Touch and pen', camera: 'Camera',
+  cpu: 'Processor', memory: 'Memory', storage: 'Storage', screen: 'Screen' };
 
 export function mount(root) {
   root.className = 'drivers';
@@ -16,13 +18,16 @@ export function mount(root) {
   const progress = h('div.dm-progress', { hidden: true });
   const scanBtn = h('button.pill-btn', { onclick: () => scan() }, icon('refresh'), 'Scan again');
   const allBtn = h('button.pill-btn.on', { disabled: true }, icon('download'), 'Install all recommended');
+  // This computer (maker, model, BIOS) and firmware updates from its maker (fwupd / LVFS)
+  const computer = h('section.dm-computer', { hidden: true });
+  const firmware = h('section.dm-firmware');
   root.append(
     h('header.dm-hero',
       h('img', { src: '/img/drivers.svg', alt: '' }),
       h('div', h('h1', 'Driver Manager'), h('p', 'PolyOS finds your hardware and installs the drivers that make it work best.')),
       h('div.dm-actions', scanBtn, allBtn)),
-    banner, progress, list,
-    h('p.dm-foot', 'Drivers come from Debian’s archive (including its non-free section for NVIDIA, Broadcom and firmware). Installing needs an internet connection.'),
+    banner, progress, computer, firmware, list,
+    h('p.dm-foot', 'Drivers come from Debian’s archive (including its non-free section for NVIDIA, Broadcom and firmware); firmware updates come from your computer’s maker through the Linux Vendor Firmware Service. Installing needs an internet connection.'),
   );
 
   let result = null;
@@ -43,8 +48,54 @@ export function mount(root) {
       btn);
   }
 
+  function renderComputer() {
+    const c = result?.computer;
+    if (!c || (!c.maker && !c.model)) { computer.hidden = true; return; }
+    computer.hidden = false;
+    fill(computer, h('span.dm-ico', icon(c.laptop ? 'laptop' : 'monitor')),
+      h('div.dm-text', h('small.dm-kind', 'This computer'), h('b', [c.maker, c.model].filter(Boolean).join(' ')),
+        c.bios ? h('span.dm-state', `BIOS/UEFI firmware ${c.bios}${c.biosDate ? ` (${c.biosDate})` : ''}`) : null));
+  }
+
+  let fw = null;
+  function renderFirmware() {
+    if (!fw) {
+      fill(firmware, h('div.dm-card', h('span.dm-ico', icon('chip')), h('div.dm-text', h('small.dm-kind', 'Firmware'),
+        h('b', 'Checking with your computer’s maker…'))));
+      return;
+    }
+    if (!fw.available) {
+      fill(firmware, h('p.dm-note', icon('info'), fw.reason || 'Firmware updates aren’t available on this computer.'));
+      return;
+    }
+    const maker = result?.computer?.maker || 'your computer’s maker';
+    fill(firmware, fw.updates.length ? h('article.dm-card.needs', h('span.dm-ico', icon('chip')),
+      h('div.dm-text', h('small.dm-kind', `Firmware from ${maker}`),
+        h('b', fw.updates.length === 1 ? `${fw.updates[0].device} ${fw.updates[0].version}` : `${fw.updates.length} firmware updates`),
+        h('span.dm-state', icon('download'), 'Update available'),
+        h('p', 'Published by the maker for this exact model (Linux Vendor Firmware Service). Most install while the computer restarts; keep it plugged in.'),
+        h('div.dm-pkgs', fw.updates.map((u) => h('code', `${u.device}: ${u.current} → ${u.version}`)))),
+      h('button.pill-btn', { disabled: busy, onclick: installFirmware }, 'Update'))
+      : h('article.dm-card', h('span.dm-ico', icon('chip')), h('div.dm-text', h('small.dm-kind', `Firmware from ${maker}`),
+        h('b', 'Up to date'), h('span.dm-state', icon('check'), 'No newer firmware for this computer right now'))));
+  }
+  function loadFirmware() {
+    fw = null;
+    renderFirmware();
+    api.get('/api/drivers/firmware').then((r) => { fw = r; renderFirmware(); }, () => { fw = { available: false }; renderFirmware(); });
+  }
+  async function installFirmware() {
+    try {
+      await withAdmin(() => api.post('/api/drivers/firmware', {}),
+        { title: 'Update firmware', text: 'Enter your password to install firmware from your computer’s maker.' });
+    } catch (err) {
+      if (!err.cancelled) showError(err.message);
+    }
+  }
+
   function render() {
     if (!result) return;
+    renderComputer();
     const pending = [...new Set(result.devices.flatMap((d) => d.missing))];
     allBtn.disabled = busy || !pending.length;
     allBtn.onclick = () => install(pending);
@@ -94,8 +145,10 @@ export function mount(root) {
       fill(banner, icon('check'), h('span', job.restart ? 'Drivers installed. Restart to start using them.' : 'Drivers installed.'),
         job.restart ? h('button.pill-btn.on', { onclick: () => power('reboot') }, 'Restart now') : null);
       scan();
+      if (job.target === 'firmware') loadFirmware();
     }
     render();
   });
   scan();
+  loadFirmware();
 }
