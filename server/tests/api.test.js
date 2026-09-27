@@ -215,21 +215,23 @@ test('update check and downloads need no account', async () => {
   // with SourceForge set up, the whole ISO comes from there (GitHub may hold it only in parts)
   process.env.SOURCEFORGE_PROJECT = 'polyos-7';
   try {
-    // SourceForge unreachable: its direct link, which picks a mirror by itself
-    const sf = await anyone('GET', '/api/download/pc');
-    assert.equal(sf.headers.location, 'https://downloads.sourceforge.net/project/polyos-7/v9.1.0/polyos-amd64.iso');
+    // a whole ISO on GitHub is still downloaded from there
+    assert.equal((await anyone('GET', '/api/download/pc')).headers.location, 'https://example.test/polyos-amd64.iso');
+    // the ARM64 one isn't on this release: SourceForge unreachable, its direct link, which picks a mirror by itself
+    const sf = await anyone('GET', '/api/download/arm64');
+    assert.equal(sf.headers.location, 'https://downloads.sourceforge.net/project/polyos-7/v9.1.0/polyos-arm64.iso');
     assert.equal(sf.headers['cache-control'], 'no-store');
     // normally: straight to a mirror's link to the file, so the download starts from this site
     const saved = globalThis.fetch;
-    const mirror = 'https://example.dl.sourceforge.net/project/polyos-7/v9.1.0/polyos-amd64.iso?viasf=1&e=1&st=x';
+    const mirror = 'https://example.dl.sourceforge.net/project/polyos-7/v9.1.0/polyos-arm64.iso?viasf=1&e=1&st=x';
     let answer = mirror;
     globalThis.fetch = async (url, init) => (String(url).startsWith('https://downloads.sourceforge.net/')
       ? new Response(null, { status: 302, headers: { location: answer } })
       : saved(url, init));
     try {
-      assert.equal((await anyone('GET', '/api/download/pc')).headers.location, mirror);
-      answer = 'https://elsewhere.test/polyos-amd64.iso'; // only SourceForge's own mirrors are passed on
-      assert.equal((await anyone('GET', '/api/download/pc')).headers.location, sf.headers.location);
+      assert.equal((await anyone('GET', '/api/download/arm64')).headers.location, mirror);
+      answer = 'https://elsewhere.test/polyos-arm64.iso'; // only SourceForge's own mirrors are passed on
+      assert.equal((await anyone('GET', '/api/download/arm64')).headers.location, sf.headers.location);
     } finally {
       globalThis.fetch = saved;
     }

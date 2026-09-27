@@ -342,12 +342,12 @@ route('GET', '/api/download/:what', null, async ({ params, res }) => {
   try {
     const rel = await releases.latest('stable');
     const project = sourceforgeProject();
-    if (project && file.endsWith('.iso')) {
-      // the whole ISO, one file, from SourceForge (GitHub holds files under 2 GB, so big ISOs are in parts there)
+    if (rel.assets[file]) {
+      location = rel.assets[file].url; // GitHub serves it as a plain download
+    } else if (project && file.endsWith('.iso')) {
+      // GitHub holds files under 2 GiB, so a bigger ISO is only in parts there: the whole one from SourceForge
       location = await sourceforgeFile(project, `v${rel.version}/${file}`);
       cache = 'no-store'; // a mirror's link expires
-    } else if (rel.assets[file]) {
-      location = rel.assets[file].url;
     } else if (rel.assets[`${file}.part0`]) {
       location = rel.page; // only in parts: the release page lists them (a single part isn't a working ISO)
     }

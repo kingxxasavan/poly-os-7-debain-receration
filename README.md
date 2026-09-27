@@ -234,7 +234,7 @@ the computer it runs on (`--arch`); GitHub Actions builds both.
 `0.6.0` → `0.6.1`), write what changed in `RELEASE_NOTES.md` (Settings › Updates, the update
 notice and the website's release notes show it), and push both to `main`. GitHub builds both ISOs and, about 15 minutes later,
 publishes them with a `SHA256SUMS` file as release `v<version>` (split into parts if one is ever
-over GitHub's 2 GB file limit). The website's Download buttons offer the new release as soon as it
+over GitHub's 2 GiB file limit). The website's Download buttons offer the new release as soon as it
 appears; nothing on the website needs changing. Pushes that don't change the version don't build
 anything, and a version that's already released isn't built again. To publish by hand instead, run
 **Actions → Build PolyOS ISO → Run workflow** with **Publish as a GitHub Release** ticked, or push
@@ -396,14 +396,16 @@ set the variable `RELEASES_REPO` to its name and the secret `RELEASES_TOKEN` to 
 create releases there (and set the same `RELEASES_REPO` on Vercel). To change the release key,
 add the new public key to `TRUSTED_KEYS` one release before switching the secret.
 
-**SourceForge (one ISO file).** GitHub keeps release files under 2 GB, so a bigger ISO is published
-there in parts. `.github/workflows/sourceforge.yml` joins them after every release, checks them
+**SourceForge (one ISO file).** GitHub takes release files under 2 GiB, so an ISO bigger than that
+is published there in parts. `.github/workflows/sourceforge.yml` joins them after every release, checks them
 against `SHA256SUMS` and uploads the whole ISOs to `sourceforge.net/projects/<project>/files/v<version>/`.
 Set it up once: the repository variables `SF_PROJECT` (the project's short name) and `SF_USER` (your
 SourceForge username), and the secret `SF_SSH_KEY` (a private SSH key whose public half is in
-SourceForge > Account Settings > SSH Settings). Then set `SOURCEFORGE_PROJECT` on Vercel, and the
-website's Download buttons hand out the one-file ISO from SourceForge. *Actions > Mirror to
-SourceForge > Run workflow* mirrors a release that's already out.
+SourceForge > Account Settings > SSH Settings). Then set `SOURCEFORGE_PROJECT` on Vercel. The website's
+Download buttons give the ISO from GitHub whenever the release has it as one file (a plain download);
+only an ISO that GitHub has in parts comes from SourceForge. *Actions > Mirror to SourceForge > Run
+workflow* mirrors a release that's already out, and *Actions > Put the whole ISO on a release* joins
+the parts of a release made before 1.3.3 (those split anything over 2,000,000,000 bytes).
 
 **Updates for one edition.** Set `__editions__ = ("developer",)` in `polyos/__init__.py` (next to
 `__version__`) to send a release only to Developer edition computers. The workflow writes the

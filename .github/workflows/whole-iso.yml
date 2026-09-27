@@ -1,0 +1,67 @@
+# Put the whole ISO on a release that has it only in parts.
+#
+# Releases up to 1.3.2 split any ISO over 2,000,000,000 bytes, but GitHub takes files up to 2 GiB
+# (2,147,483,648 bytes), and a whole file on the release is a plain download from the website's
+# Download button. This joins the parts, checks the ISO against the release's SHA256SUMS, uploads it
+# and then removes the parts. Newer releases split only ISOs that really are over 2 GiB.
+#
+# Actions > Put the whole ISO on a release > Run workflow, with a tag like v1.3.2 (empty: the newest).
+
+name: Put the whole ISO on a release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release (e.g. v1.3.2; empty = the newest)
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+env:
+  RELEASES_REPO: ${{ vars.RELEASES_REPO || github.repository }}
+
+jobs:
+  join:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ secrets.RELEASES_TOKEN || github.token }}
+      TAG: ${{ inputs.tag }}
+    steps:
+      - name: Join the parts and check them
+        run: |
+          mkdir iso && cd iso
+          if [ -z "$TAG" ]; then TAG="$(gh release view --repo "$RELEASES_REPO" --json tagName -q .tagName)"; fi
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+          gh release download "$TAG" --repo "$RELEASES_REPO" --pattern 'polyos-*.iso.part*' --pattern SHA256SUMS
+          for first in *.iso.part0; do
+            [ -e "$first" ] || { echo "::notice::$TAG has no ISO in parts, nothing to do."; exit 0; }
+            iso="${first%.part0}"
+            cat $(ls "$iso".part* | sort -V) > "$iso"
+            size="$(stat -c %s "$iso")"
+            if [ "$size" -ge 2147483648 ]; then
+              echo "::warning::$iso is $size bytes, over GitHub's 2 GiB limit, so it stays in parts."
+              rm "$iso"
+              continue
+            fi
+            grep -E " $iso\$" SHA256SUMS | sha256sum -c
+          done
+          ls -lh
+
+      - name: Upload the whole ISOs and remove their parts
+        run: |
+          cd iso
+          for iso in polyos-*.iso; do
+            [ -e "$iso" ] || continue
+            gh release upload "$TAG" "$iso" --repo "$RELEASES_REPO" --clobber
+            # the parts go only once the release lists the whole ISO at its full size
+            size="$(gh release view "$TAG" --repo "$RELEASES_REPO" --json assets -q ".assets[] | select(.name == \"$iso\") | .size")"
+            test "$size" = "$(stat -c %s "$iso")"
+            for part in "$iso".part*; do
+              gh release delete-asset "$TAG" "$part" --repo "$RELEASES_REPO" --yes
+            done
+            echo "### $iso is on [$TAG](https://github.com/$RELEASES_REPO/releases/tag/$TAG) as one file" >> "$GITHUB_STEP_SUMMARY"
+          done

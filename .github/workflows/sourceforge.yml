@@ -1,6 +1,6 @@
 # Mirror a PolyOS release to SourceForge as whole ISO files.
 #
-# GitHub keeps release files under 2 GB, so a bigger ISO is published there in parts. SourceForge
+# GitHub takes release files under 2 GiB, so a bigger ISO is published there in parts. SourceForge
 # has no such limit: this joins the parts, checks every ISO against the release's SHA256SUMS, and
 # uploads them to https://sourceforge.net/projects/<project>/files/v<version>/. The website's
 # Download buttons send people there when the Vercel variable SOURCEFORGE_PROJECT is set.

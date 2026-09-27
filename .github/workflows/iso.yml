@@ -162,7 +162,7 @@ jobs:
           python3 main.py deb --out dist --manifest
           test -s dist/polyos-update.json.sig
 
-      - name: Checksums (and parts, if an ISO is over GitHub's 2 GB per-file limit)
+      - name: Checksums (and parts, if an ISO is over GitHub's 2 GiB per-file limit)
         run: |
           cd dist
           ls *.iso >/dev/null  # stop if no ISO was built at all
@@ -172,7 +172,9 @@ jobs:
           done
           sha256sum ./*.iso | sed 's#\./##' > SHA256SUMS
           for iso in *.iso; do
-            if [ "$(stat -c %s "$iso")" -gt 2000000000 ]; then
+            # GitHub takes files under 2 GiB (2147483648 bytes) and serves them as a plain download,
+            # so only a bigger ISO is split (the website then sends people to SourceForge's whole copy)
+            if [ "$(stat -c %s "$iso")" -ge 2147483648 ]; then
               split -b 1900M -d -a 1 "$iso" "$iso.part"
               sha256sum "$iso".part* >> SHA256SUMS
               rm "$iso"
@@ -199,7 +201,7 @@ jobs:
             echo '| `polyos-amd64.iso` | Intel and AMD PCs and laptops (almost every Windows PC) |'
             echo '| `polyos-arm64.iso` | ARM64: Apple Silicon Macs in UTM, Parallels or VMware Fusion, ARM cloud servers, and ARM64 computers with UEFI firmware (from a USB drive) |'
             echo
-            if [ -n "${SF_PROJECT:-}" ]; then
+            if [ -n "${PARTS:-}" ] && [ -n "${SF_PROJECT:-}" ]; then
               echo "1. Download the \`.iso\` for your computer, as one file, from [SourceForge](https://sourceforge.net/projects/$SF_PROJECT/files/${{ needs.setup.outputs.tag }}/) (or from the website's Download page)."
             elif [ -n "${PARTS:-}" ]; then
               echo '1. Download the `.iso` for your computer (in parts: join them with `cat polyos-*.part* > polyos.iso` on Linux/macOS, or `copy /b part0+part1 polyos.iso` on Windows).'
