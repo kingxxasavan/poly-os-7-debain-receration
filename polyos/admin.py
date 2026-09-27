@@ -201,6 +201,9 @@ def store_action(action: str, app_id: str) -> None:
     if action == "install":
         if app["source"] == "debian":
             apt_update()
+            if "google-chrome-stable" in app["packages"] and not has_candidate("google-chrome-stable"):
+                install_chrome()  # a PolyOS from before 1.3 has no Google source yet: Chrome's package adds it
+                return emit({"progress": 1.0, "message": "Google Chrome is installed."})
             apt(["install", *app["packages"]], start=0.1)
             if "docker.io" in app["packages"]:
                 join_group("docker")
@@ -224,6 +227,30 @@ def store_action(action: str, app_id: str) -> None:
 GAMING_SYSCTL = Path("/etc/sysctl.d/80-polyos-gaming.conf")
 # SteamOS's value: some Windows games (through Proton) crash with Debian's default
 GAMING_SYSCTL_TEXT = "# PolyOS Gaming: memory maps many games need (SteamOS uses the same value)\nvm.max_map_count = 2147483642\n"
+
+
+CHROME_DEB = "https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb"
+
+
+def install_chrome() -> None:
+    """Google Chrome from Google (Intel/AMD only), when apt doesn't know it yet: its package adds Google's
+    apt source, so Chrome updates with the rest from then on. apt checks the package's integrity."""
+    import urllib.request
+    from .arch import debian_arch
+    if debian_arch() != "amd64":
+        raise AdminError("Google doesn't make Chrome for ARM computers. Chromium is the browser here.")
+    emit({"progress": 0.1, "message": "Downloading Google Chrome…"})
+    path = Path("/var/cache/apt/archives/google-chrome-stable_current_amd64.deb")
+    try:
+        with urllib.request.urlopen(urllib.request.Request(CHROME_DEB, headers={"User-Agent": "PolyOS"}), timeout=60) as res, \
+                open(path, "wb") as out:  # noqa: S310 - https
+            shutil.copyfileobj(res, out)
+    except OSError as exc:
+        raise AdminError(f"Couldn't download Google Chrome ({getattr(exc, 'reason', exc)}). Check your internet connection.") from None
+    try:
+        apt(["install", str(path)], start=0.5)
+    finally:
+        path.unlink(missing_ok=True)
 
 
 def has_candidate(package: str) -> bool:

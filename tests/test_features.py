@@ -1342,3 +1342,15 @@ class AdminPasswordTests(unittest.TestCase):
             self.assertFalse(admin.ready())
         self.assertTrue(all("-v" not in c for c in calls))  # never "validate" (which leaves a ticket)
         self.assertTrue(all("-k" in c for c in calls))
+
+
+class ChromeInstallTests(unittest.TestCase):
+    """PolyMarket's Chrome on a PolyOS from before 1.3 (no Google apt source yet): Google's own package."""
+
+    def test_chrome_without_a_source(self):
+        with mock.patch.object(admin, "apt_update"), mock.patch.object(admin, "has_candidate", return_value=False), \
+                mock.patch.object(admin, "install_chrome") as chrome, mock.patch.object(admin, "apt") as apt, \
+                mock.patch.object(admin, "emit"):
+            admin.store_action("install", "chrome")
+        chrome.assert_called_once()
+        apt.assert_not_called()
