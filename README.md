@@ -407,6 +407,16 @@ only an ISO that GitHub has in parts comes from SourceForge. *Actions > Mirror t
 workflow* mirrors a release that's already out, and *Actions > Put the whole ISO on a release* joins
 the parts of a release made before 1.3.3 (those split anything over 2,000,000,000 bytes).
 
+**Your own ISO link (an ISO built on your computer, hosted anywhere).** Build the ISO yourself (WSL on
+Windows or any Debian machine, above: `sudo python3 main.py iso`), upload it wherever you like, and on
+Vercel set `ISO_URL_PC` (and `ISO_URL_ARM64` for the ARM64 one) to its link, then redeploy. While
+it's set, that Download button gives your file; remove the variable to go back to GitHub. The link
+must be `https://`; `{version}` in it becomes the newest release's version. A Google Drive share link
+(`drive.google.com/file/d/...`, shared as "Anyone with the link") and a Dropbox link are turned into
+their direct-download form. Drive limits how often a big file is downloaded, so for a launch prefer a
+host made for downloads. Only the ISO links change: checksums and updates still come from the release,
+and PolyOS updates itself from GitHub either way.
+
 **Updates for one edition.** Set `__editions__ = ("developer",)` in `polyos/__init__.py` (next to
 `__version__`) to send a release only to Developer edition computers. The workflow writes the
 editions into the signed `polyos-update.json` and publishes the release as a GitHub pre-release;

@@ -111,20 +111,20 @@ async function showRelease() {
     const iso = assets.find((a) => a.name === `polyos-${arch}.iso`);
     const parts = assets.filter((a) => a.name.startsWith(`polyos-${arch}.iso.part`)).sort((a, b) => a.name.localeCompare(b.name));
     return { arch, label, iso, parts, href: `/download/${slug}`, size: iso ? iso.size : parts.reduce((n, p) => n + p.size, 0) };
-  }).filter((b) => b.iso || b.parts.length);
+  }).filter((b) => b.iso || b.parts.length || release.oneFile?.[b.arch]);
   if (!builds.length) return;
   if (builds.length > 1 && onArm) builds.reverse(); // ARM64 first on ARM computers
   const date = new Date(release.published).toLocaleDateString([], { year: 'numeric', month: 'long', day: 'numeric' });
   document.querySelector('[data-release-version]').textContent = `v${release.version}`;
   document.querySelector('[data-release-meta]').textContent =
     `Live USB and installer · ${builds.map((b) => b.label).join(' and ')} · released ${date}`;
-  // with a whole-ISO mirror (SourceForge), /download/<arch> gives one file even when GitHub has parts
-  buttons.replaceChildren(...builds.flatMap((b, i) => (b.iso || release.wholeIso
-    ? [downloadButton(b.href, b.arch, `Download for ${b.label}`, i === 0, gb(b.size))]
+  // /download/<arch> gives one file even when GitHub has parts (a link set on Vercel, or SourceForge)
+  buttons.replaceChildren(...builds.flatMap((b, i) => (b.iso || release.oneFile?.[b.arch]
+    ? [downloadButton(b.href, b.arch, `Download for ${b.label}`, i === 0, b.size ? gb(b.size) : '')]
     : b.parts.map((p, n) => downloadButton(p.url, b.arch, `${b.label}, part ${n + 1} of ${b.parts.length}`,
       i === 0 && n === 0, gb(p.size))))));
   if (builds.length < 2) document.querySelector('.dl-which')?.setAttribute('hidden', '');
-  if (!release.wholeIso && builds.some((b) => !b.iso)) {
+  if (builds.some((b) => !b.iso && !release.oneFile?.[b.arch])) {
     document.querySelector('[data-release-note]').innerHTML = 'Some downloads come in parts. Download them all, then join them: '
       + '<code>cat polyos-*.part* &gt; polyos.iso</code> (Linux, macOS) or <code>copy /b part0+part1 polyos.iso</code> (Windows).';
   }

@@ -307,10 +307,36 @@ function sourceforgeProject() {
   const project = (process.env.SOURCEFORGE_PROJECT || '').trim();
   return /^[a-z0-9-]+$/i.test(project) ? project : '';
 }
+// An ISO you host yourself, e.g. one built on your own computer: Vercel variables ISO_URL_PC and
+// ISO_URL_ARM64. While one is set, that Download button gives it; remove it to go back to GitHub.
+// {version} in the link becomes the newest release's version (1.3.2). Share links from Google Drive
+// and Dropbox become their direct-download form (no "can't scan this file for viruses" page).
+const HOSTED = { 'polyos-amd64.iso': 'ISO_URL_PC', 'polyos-arm64.iso': 'ISO_URL_ARM64' };
+function hostedIso(file, version) {
+  const raw = (process.env[HOSTED[file]] || '').trim().replaceAll('{version}', version);
+  let url;
+  try {
+    url = new URL(raw);
+  } catch {
+    return '';
+  }
+  if (url.protocol !== 'https:') return '';
+  const drive = url.hostname === 'drive.google.com'
+    && (url.pathname.match(/^\/file\/d\/([\w-]+)/)?.[1] || url.searchParams.get('id'));
+  if (drive) return `https://drive.usercontent.google.com/download?id=${drive}&export=download&confirm=t`;
+  if (/(^|\.)dropbox\.com$/.test(url.hostname)) url.searchParams.set('dl', '1');
+  return url.href;
+}
 route('GET', '/api/releases/latest', null, async ({ url }) => {
   const rel = await releases.latest(url.searchParams.get('channel') || 'stable');
-  // wholeIso: /download/pc and /download/arm64 give the whole ISO even when GitHub holds it in parts
-  return { ...rel, repo: releases.releasesRepo(), wholeIso: Boolean(sourceforgeProject()) };
+  // oneFile: which of /download/pc and /download/arm64 give a whole ISO (GitHub may hold it in parts)
+  const oneFile = {};
+  for (const arch of ['amd64', 'arm64']) {
+    const file = `polyos-${arch}.iso`;
+    oneFile[arch] = Boolean(hostedIso(file, rel.version) || rel.assets[file]
+      || (sourceforgeProject() && rel.assets[`${file}.part0`]));
+  }
+  return { ...rel, repo: releases.releasesRepo(), oneFile };
 });
 route('GET', '/api/releases', null, async () => ({ releases: await releases.history(12) }));
 // A SourceForge file as a link that starts the download itself. downloads.sourceforge.net picks a
@@ -342,7 +368,11 @@ route('GET', '/api/download/:what', null, async ({ params, res }) => {
   try {
     const rel = await releases.latest('stable');
     const project = sourceforgeProject();
-    if (rel.assets[file]) {
+    const hosted = file.endsWith('.iso') && hostedIso(file, rel.version);
+    if (hosted) {
+      location = hosted;
+      cache = 'no-store'; // takes effect as soon as the link changes
+    } else if (rel.assets[file]) {
       location = rel.assets[file].url; // GitHub serves it as a plain download
     } else if (project && file.endsWith('.iso')) {
       // GitHub holds files under 2 GiB, so a bigger ISO is only in parts there: the whole one from SourceForge

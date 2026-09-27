@@ -211,7 +211,7 @@ test('update check and downloads need no account', async () => {
   const dl = await anyone('GET', '/api/download/pc');
   assert.equal(dl.status, 302);
   assert.equal(dl.headers.location, 'https://example.test/polyos-amd64.iso');
-  assert.equal((await anyone('GET', '/api/releases/latest')).data.wholeIso, false);
+  assert.deepEqual((await anyone('GET', '/api/releases/latest')).data.oneFile, { amd64: true, arm64: false });
   // with SourceForge set up, the whole ISO comes from there (GitHub may hold it only in parts)
   process.env.SOURCEFORGE_PROJECT = 'polyos-7';
   try {
@@ -236,9 +236,25 @@ test('update check and downloads need no account', async () => {
       globalThis.fetch = saved;
     }
     assert.equal((await anyone('GET', '/api/download/checksums')).headers.location.includes('sourceforge'), false);
-    assert.equal((await anyone('GET', '/api/releases/latest')).data.wholeIso, true);
   } finally {
     delete process.env.SOURCEFORGE_PROJECT;
+  }
+  // an ISO hosted elsewhere (built on your own computer): its link wins while it's set
+  try {
+    const where = async (what) => (await anyone('GET', `/api/download/${what}`)).headers.location;
+    process.env.ISO_URL_PC = 'https://files.example.test/v{version}/polyos-amd64.iso';
+    assert.equal(await where('pc'), 'https://files.example.test/v9.1.0/polyos-amd64.iso');
+    assert.equal((await where('checksums')).includes('files.example.test'), false); // only the ISOs
+    process.env.ISO_URL_ARM64 = 'https://drive.google.com/file/d/1AbC-d_9/view?usp=sharing';
+    assert.equal(await where('arm64'), 'https://drive.usercontent.google.com/download?id=1AbC-d_9&export=download&confirm=t');
+    assert.deepEqual((await anyone('GET', '/api/releases/latest')).data.oneFile, { amd64: true, arm64: true });
+    process.env.ISO_URL_ARM64 = 'https://www.dropbox.com/scl/fi/x/polyos-arm64.iso?rlkey=k&dl=0';
+    assert.equal(await where('arm64'), 'https://www.dropbox.com/scl/fi/x/polyos-arm64.iso?rlkey=k&dl=1');
+    process.env.ISO_URL_PC = 'http://insecure.test/polyos-amd64.iso'; // not https: ignored, GitHub's again
+    assert.equal(await where('pc'), 'https://example.test/polyos-amd64.iso');
+  } finally {
+    delete process.env.ISO_URL_PC;
+    delete process.env.ISO_URL_ARM64;
   }
 });
 
