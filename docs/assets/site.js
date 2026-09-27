@@ -118,12 +118,13 @@ async function showRelease() {
   document.querySelector('[data-release-version]').textContent = `v${release.version}`;
   document.querySelector('[data-release-meta]').textContent =
     `Live USB and installer · ${builds.map((b) => b.label).join(' and ')} · released ${date}`;
-  buttons.replaceChildren(...builds.flatMap((b, i) => (b.iso
+  // with a whole-ISO mirror (SourceForge), /download/<arch> gives one file even when GitHub has parts
+  buttons.replaceChildren(...builds.flatMap((b, i) => (b.iso || release.wholeIso
     ? [downloadButton(b.href, b.arch, `Download for ${b.label}`, i === 0, gb(b.size))]
     : b.parts.map((p, n) => downloadButton(p.url, b.arch, `${b.label}, part ${n + 1} of ${b.parts.length}`,
       i === 0 && n === 0, gb(p.size))))));
   if (builds.length < 2) document.querySelector('.dl-which')?.setAttribute('hidden', '');
-  if (builds.some((b) => !b.iso)) {
+  if (!release.wholeIso && builds.some((b) => !b.iso)) {
     document.querySelector('[data-release-note]').innerHTML = 'Some downloads come in parts. Download them all, then join them: '
       + '<code>cat polyos-*.part* &gt; polyos.iso</code> (Linux, macOS) or <code>copy /b part0+part1 polyos.iso</code> (Windows).';
   }

@@ -302,9 +302,15 @@ route('GET', '/api/status', null, async () => {
 });
 route('GET', '/api/countries', null, async () => ({ countries: COUNTRIES }));
 route('GET', '/api/terms', null, async () => TERMS);
+// The SourceForge project that mirrors each release's ISOs as whole files (Vercel variable SOURCEFORGE_PROJECT)
+function sourceforgeProject() {
+  const project = (process.env.SOURCEFORGE_PROJECT || '').trim();
+  return /^[a-z0-9-]+$/i.test(project) ? project : '';
+}
 route('GET', '/api/releases/latest', null, async ({ url }) => {
   const rel = await releases.latest(url.searchParams.get('channel') || 'stable');
-  return { ...rel, repo: releases.releasesRepo() };
+  // wholeIso: /download/pc and /download/arm64 give the whole ISO even when GitHub holds it in parts
+  return { ...rel, repo: releases.releasesRepo(), wholeIso: Boolean(sourceforgeProject()) };
 });
 route('GET', '/api/releases', null, async () => ({ releases: await releases.history(12) }));
 route('GET', '/api/download/:what', null, async ({ params, res }) => {
@@ -321,8 +327,8 @@ route('GET', '/api/download/:what', null, async ({ params, res }) => {
   let location = releases.latestFileUrl(file); // works even when GitHub's API is busy
   try {
     const rel = await releases.latest('stable');
-    const project = (process.env.SOURCEFORGE_PROJECT || '').trim();
-    if (project && file.endsWith('.iso') && /^[a-z0-9-]+$/i.test(project)) {
+    const project = sourceforgeProject();
+    if (project && file.endsWith('.iso')) {
       // the whole ISO, one file, from SourceForge (GitHub holds files under 2 GB, so big ISOs are in parts there)
       location = `https://sourceforge.net/projects/${project}/files/v${rel.version}/${file}/download`;
     } else if (rel.assets[file]) {
