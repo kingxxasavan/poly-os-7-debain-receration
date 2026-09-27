@@ -137,7 +137,7 @@ class StoreTests(unittest.TestCase):
         with self.assertRaises(admin.AdminError):
             admin.store_action("install", "not-an-app")
         with self.assertRaises(admin.AdminError):
-            admin.store_action("remove", "firefox")  # part of PolyOS
+            admin.store_action("remove", "chrome")  # part of PolyOS
         with self.assertRaises(admin.AdminError):
             admin.drivers_install(["openssh-server"])
 
