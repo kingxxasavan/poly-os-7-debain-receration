@@ -1,4 +1,4 @@
-PolyOS 1.3 is the cleaned-up PolyOS 7: everything tidied up to feel like a finished system.
+PolyOS 1.3 is the cleaned-up PolyOS 7: everything tidied up to feel like a finished system. (1.3.1: on Intel/AMD computers only Google Chrome is on the taskbar and desktop, not Chromium too.)
 
 - **A real Start menu.** Like Windows 11: search apps, settings and your files; pinned apps (right-click to pin to Start or the taskbar); All apps A to Z; your recent files; and power, with *Restart to Windows* on dual-boot computers.
 - **A cleaner taskbar.** The launcher button is gone; **^** shows everything running, including apps in the background like Steam or Discord. Quick settings has Airplane mode, Energy saver and Night light next to Wi-Fi, sound and brightness.

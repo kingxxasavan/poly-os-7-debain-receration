@@ -13,7 +13,7 @@ from pathlib import Path
 
 from . import __version__, installer, paths, startup, store
 from .files import kind_of
-from .backend import DISPLAY_NAMES, DOCK_HEIGHT, DOCK_MARGIN, PANEL_HEIGHT, Backend, app_hidden
+from .backend import DISPLAY_NAMES, DOCK_HEIGHT, DOCK_MARGIN, PANEL_HEIGHT, Backend, app_hidden, supersede_browsers
 from .core import ApiError, EventBus, Settings, bundled_icon, icon_names, letter_icon
 from .files import P
 from .privileged import NeedPassword
@@ -25,6 +25,7 @@ OWN_APPS = {"polyos-settings.desktop": "settings", "polyos-files.desktop": "file
 
 _APPS = [
     ("google-chrome.desktop", "Google Chrome", "Access the Internet", "Network;WebBrowser"),
+    ("chromium.desktop", "Chromium", "Access the Internet", "Network;WebBrowser"),  # kept for cloud gaming
     ("polyos-files.desktop", "Files", "Browse and organize your files", "System;FileManager"),
     ("thunar.desktop", "Thunar File Manager", "Browse the filesystem", "System;FileManager"),
     ("xfce4-terminal.desktop", "Terminal", "Use the command line", "System;TerminalEmulator"),
@@ -56,7 +57,7 @@ _ICONS = {"google-chrome.desktop": "google-chrome", "thunar.desktop": "org.xfce.
           "arandr.desktop": "preferences-desktop-display", "xfce4-screenshooter.desktop": "org.xfce.screenshooter"}
 
 # what a real PolyOS image ships of the apps above (the rest stand for apps installed later)
-MOCK_BASE = {"google-chrome.desktop", "xfce4-terminal.desktop", "org.xfce.mousepad.desktop", "pavucontrol.desktop",
+MOCK_BASE = {"google-chrome.desktop", "chromium.desktop", "xfce4-terminal.desktop", "org.xfce.mousepad.desktop", "pavucontrol.desktop",
              "nm-connection-editor.desktop", "htop.desktop", "org.gnome.Calculator.desktop", "arandr.desktop",
              "xfce4-screenshooter.desktop", "org.xfce.ristretto.desktop", "thunar.desktop"}
 
@@ -78,6 +79,7 @@ class MockBackend(Backend):
             ({"id": i, "name": DISPLAY_NAMES.get(i, n), "description": d, "categories": c.split(";"), "keywords": [],
               "icon": f"/icon/app/{i}", "hidden": app_hidden(i, MOCK_BASE)} for i, n, d, c in apps),
             key=lambda a: a["name"].casefold())
+        supersede_browsers(self._apps, MOCK_BASE)
         self._admin_ready = live  # the live USB's account needs no password; "polyos" unlocks the mock
         if live:
             self.show_install_app()

@@ -35,7 +35,7 @@ export function mount(root, store) {
   function renderIcons() {
     const { settings, apps } = store.state;
     const byId = new Map(apps.map((a) => [a.id, a]));
-    const items = settings.desktopIcons.map((id) => byId.get(id)).filter(Boolean);
+    const items = settings.desktopIcons.map((id) => byId.get(id)).filter((a) => a && !a.superseded);
     const single = settings.desktopOpen === 'single';
     icons.replaceChildren(...items.map((app) => {
       const el = h('button.desk-icon', { role: 'listitem', class: app.id === selected ? 'sel' : '', title: app.description || app.name },

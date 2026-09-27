@@ -15,7 +15,7 @@ function openPopup(view, el, extra = {}) {
 function taskItems(state) {
   const apps = new Map(state.apps.map((a) => [a.id, a]));
   const items = state.settings.pinned
-    .filter((id) => apps.has(id))
+    .filter((id) => apps.has(id) && !apps.get(id).superseded) // Chromium next to Chrome: only Chrome
     .map((id) => ({ key: id, appId: id, app: apps.get(id), pinned: true, windows: [] }));
   for (const win of state.windows) {
     let item = win.appId && items.find((i) => i.appId === win.appId);
