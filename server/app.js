@@ -313,6 +313,19 @@ route('GET', '/api/releases/latest', null, async ({ url }) => {
   return { ...rel, repo: releases.releasesRepo(), wholeIso: Boolean(sourceforgeProject()) };
 });
 route('GET', '/api/releases', null, async () => ({ releases: await releases.history(12) }));
+// A SourceForge file as a link that starts the download itself. downloads.sourceforge.net picks a
+// mirror and answers with that mirror's signed link to the file (valid for about a day), so the
+// browser downloads straight from the mirror and stays on this site: no SourceForge page, no countdown.
+// If SourceForge is slow or answers something else, the plain direct link still works (it redirects too).
+async function sourceforgeFile(project, path) {
+  const direct = `https://downloads.sourceforge.net/project/${project}/${path}`;
+  try {
+    const res = await fetch(direct, { method: 'HEAD', redirect: 'manual', signal: AbortSignal.timeout(4000) });
+    const mirror = res.headers.get('location') || '';
+    if (res.status >= 300 && res.status < 400 && /^https:\/\/[a-z0-9-]+\.dl\.sourceforge\.net\//.test(mirror)) return mirror;
+  } catch { /* the direct link */ }
+  return direct;
+}
 route('GET', '/api/download/:what', null, async ({ params, res }) => {
   const file = { pc: 'polyos-amd64.iso', arm64: 'polyos-arm64.iso', checksums: 'SHA256SUMS' }[params.what];
   if (!file && /^polyos-[a-z]+$/.test(params.what)) { // the update packages, e.g. /download/polyos-shell
@@ -325,12 +338,14 @@ route('GET', '/api/download/:what', null, async ({ params, res }) => {
   }
   if (!file) fail('Not found.', 404);
   let location = releases.latestFileUrl(file); // works even when GitHub's API is busy
+  let cache = 'public, max-age=300';
   try {
     const rel = await releases.latest('stable');
     const project = sourceforgeProject();
     if (project && file.endsWith('.iso')) {
       // the whole ISO, one file, from SourceForge (GitHub holds files under 2 GB, so big ISOs are in parts there)
-      location = `https://sourceforge.net/projects/${project}/files/v${rel.version}/${file}/download`;
+      location = await sourceforgeFile(project, `v${rel.version}/${file}`);
+      cache = 'no-store'; // a mirror's link expires
     } else if (rel.assets[file]) {
       location = rel.assets[file].url;
     } else if (rel.assets[`${file}.part0`]) {
@@ -339,7 +354,7 @@ route('GET', '/api/download/:what', null, async ({ params, res }) => {
   } catch { /* the direct link above */ }
   res.statusCode = 302;
   res.setHeader('Location', location);
-  res.setHeader('Cache-Control', 'public, max-age=300');
+  res.setHeader('Cache-Control', cache);
   return null;
 });
 route('POST', '/api/support', null, async ({ req, body }) => {
