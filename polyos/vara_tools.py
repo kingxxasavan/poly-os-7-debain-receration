@@ -65,6 +65,8 @@ class ToolContext:
     skills: object = None
     memory: object = None
     schedule: object = None  # reminders and routines (vara_schedule.Schedule)
+    index: object = None  # the documents in the person's folders (vara_index.DocIndex)
+    expert: dict | None = None  # the expert helper model (Settings > Vara), for consult_expert
     cancel: threading.Event = field(default_factory=threading.Event)
     gentle: bool = False  # background activity limited: programs run at low CPU priority
 
@@ -579,6 +581,7 @@ def fetch_url(ctx: ToolContext, args: dict) -> str:
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
         raise ToolError(f"Couldn't reach {url}: {getattr(exc, 'reason', exc)}") from None
     text = raw.decode("utf-8", "replace")
+    links = page_links(text, url) if kind == "text/html" and args.get("links") else []
     if kind == "text/html":
         text = re.sub(r"(?is)<(script|style|noscript|svg|head)\b.*?</\1>", " ", text)
         text = re.sub(r"(?i)<(br|/p|/div|/li|/h[1-6]|/tr|/pre)\b[^>]*>", "\n", text)
@@ -587,7 +590,71 @@ def fetch_url(ctx: ToolContext, args: dict) -> str:
         text = re.sub(r"\n\s*\n+", "\n\n", text).strip()
     elif not kind.startswith("text/") and kind not in ("application/json", "application/xml"):
         raise ToolError(f"{url} is {kind}, not a page Vara can read.")
-    return clip(f"{url}\n\n{text}", 16_000)
+    listed = "\n\nLinks on the page:\n" + "\n".join(f"- {t}: {u}" for t, u in links) if links else ""
+    return clip(f"{url}\n\n{text}", 16_000 - min(len(listed), 5000)) + listed[:5000]
+
+
+def page_links(page: str, base: str, limit: int = 50) -> list[tuple[str, str]]:
+    """[(text, absolute address)] of a page's links, for following them."""
+    out, seen = [], set()
+    for href, label in re.findall(r'(?is)<a\b[^>]*?href="([^"#][^"]*)"[^>]*>(.*?)</a>', page):
+        target = urllib.parse.urljoin(base, html.unescape(href))
+        text = " ".join(html.unescape(re.sub(r"<[^>]+>", " ", label)).split())
+        if target.startswith(("http://", "https://")) and text and target not in seen:
+            seen.add(target)
+            out.append((text[:80], target))
+            if len(out) >= limit:
+                break
+    return out
+
+
+def research(ctx: ToolContext, args: dict) -> str:
+    """Search the web and read the best few pages in one go."""
+    query = " ".join(str(args.get("query") or "").split())
+    if not query:
+        raise ToolError("Say what to research.")
+    data = urllib.parse.urlencode({"q": query, "kl": "us-en"}).encode()
+    req = urllib.request.Request("https://html.duckduckgo.com/html/", data=data, method="POST",
+                                 headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) PolyOS-Vara/1.0",
+                                          "Content-Type": "application/x-www-form-urlencoded"})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as res:
+            results = parse_search_results(res.read(2_000_000).decode("utf-8", "replace"))
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise ToolError(f"The web search didn't answer ({getattr(exc, 'reason', exc)}).") from None
+    pages = int(args.get("pages") or 3) if str(args.get("pages") or "3").isdigit() else 3
+    parts = []
+    for r in results[:max(1, min(pages, 5))]:
+        try:
+            parts.append(clip(fetch_url(ctx, {"url": r["url"]}), 3500))
+        except ToolError as exc:
+            parts.append(f"{r['url']}\n(couldn't read: {exc})")
+    if not parts:
+        raise ToolError("The search found nothing. Try other words.")
+    return "\n\n---\n\n".join(parts) + "\n\nCite the addresses you used."
+
+
+def search_documents(ctx: ToolContext, args: dict) -> str:
+    if ctx.index is None:
+        raise ToolError("Searching your documents is turned off (Settings › Vara).")
+    found = ctx.index.search(str(args.get("query") or ""))
+    if not found:
+        stats = ctx.index.stats()
+        return "No documents match." + ("" if stats["files"] else " (The index is still being built.)")
+    return "\n".join(f"- {show(ctx, Path(f['path']))}: {f['snippet']}" for f in found) + \
+        "\n\nRead one with read_document."
+
+
+def read_document(ctx: ToolContext, args: dict) -> str:
+    """Any document as text: PDFs, Word and LibreOffice files, presentations, plain text."""
+    from .vara_index import extract
+    path = resolve(ctx, args.get("path", ""))
+    if not path.is_file():
+        raise ToolError(f"There's no file {show(ctx, path)}.")
+    text = extract(path)
+    if not text.strip():
+        raise ToolError(f"{show(ctx, path)} has no text Vara can read (a scan or an unknown format).")
+    return clip(f"{show(ctx, path)}\n\n{text}", 20_000)
 
 
 def parse_search_results(page: str, limit: int = 8) -> list[dict]:
@@ -759,11 +826,97 @@ def cancel_scheduled(ctx: ToolContext, args: dict) -> str:
     return "Cancelled: " + describe(ctx.schedule.cancel(str(args.get("id") or "").strip()))
 
 
+# ---- the tool maker (vara_toolmaker.py) and the expert helper ----------------------------------------
+
+def make_tool(ctx: ToolContext, args: dict) -> str:
+    from . import vara_toolmaker
+    try:
+        spec = vara_toolmaker.make(ctx.home, args.get("name", ""), args.get("description", ""), args.get("params") or {},
+                                   args.get("code", ""), set(TOOLS))
+    except ValueError as exc:
+        raise ToolError(str(exc)) from None
+    return (f"Made {spec['name']} in {show(ctx, Path(spec['folder']))}. Test it with test_tool; after a test passes it's "
+            f"yours to use as my_{spec['name']}. (open with app “vscode” shows its code to the person.)")
+
+
+def test_tool(ctx: ToolContext, args: dict) -> str:
+    from . import vara_toolmaker
+    raw = args.get("args") or {}
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw) if raw.strip() else {}
+        except ValueError:
+            raise ToolError("args is a JSON object of the tool's arguments.") from None
+    try:
+        out = vara_toolmaker.run(ctx.home, str(args.get("name", "")), raw, record=True)
+    except ValueError as exc:
+        raise ToolError(str(exc)) from None
+    tested = any(t["name"] == args.get("name") and t.get("tested") for t in vara_toolmaker.load(ctx.home))
+    return out + ("\n\nThe test passed: the tool is ready as my_" + str(args.get("name")) if tested else
+                  "\n\nThe test failed: fix the code with make_tool (same name) and test again.")
+
+
+def remove_tool(ctx: ToolContext, args: dict) -> str:
+    from . import vara_toolmaker
+    vara_toolmaker.remove(ctx.home, str(args.get("name", "")))
+    return f"Removed the {args.get('name')} tool."
+
+
+def consult_expert(ctx: ToolContext, args: dict) -> str:
+    """Ask the expert helper model (e.g. Claude) for code or a second opinion."""
+    from .vara import complete
+    if not ctx.expert:
+        raise ToolError("No expert helper is set up. The person can add one (e.g. Claude) in Settings › Vara.")
+    question = str(args.get("question") or "").strip()
+    if not question:
+        raise ToolError("Say what to ask.")
+    code = str(args.get("code") or "")
+    prompt = question + (f"\n\nThe code:\n```\n{code[:30000]}\n```" if code else "")
+    try:
+        answer = complete(ctx.expert, [{"role": "system", "content": "You are an expert software engineer helping another "
+                                        "AI agent. Answer precisely; give complete, working code when asked."},
+                                       {"role": "user", "content": prompt}], timeout=180)
+    except RuntimeError as exc:
+        raise ToolError(f"The expert helper didn't answer: {exc}") from None
+    return clip(answer or "(no answer)", 20_000)
+
+
+def custom_tools(home: Path) -> dict[str, "Tool"]:
+    """The tools Vara made and tested, offered as my_<name> (each run asks first, like any program)."""
+    from . import vara_toolmaker
+    out = {}
+    for spec in vara_toolmaker.load(home):
+        if not spec.get("tested"):
+            continue
+        name, params = spec["name"], spec.get("params") or {}
+
+        def runner(ctx, args, _name=name):
+            try:
+                return vara_toolmaker.run(ctx.home, _name, args)
+            except ValueError as exc:
+                raise ToolError(str(exc)) from None
+        out[vara_toolmaker.PREFIX + name] = Tool(
+            vara_toolmaker.PREFIX + name, f"Your tool: {name}", f"(A tool you made) {spec['description']}",
+            {k: _p(v) for k, v in params.items()}, [], RUN, runner, lambda a, _n=name: f"Ran your {_n} tool",
+            detail=lambda a: json.dumps(a)[:2000], icon="tool")
+    return out
+
+
 # ---- memory and skills --------------------------------------------------------------------------
 
 def remember(ctx: ToolContext, args: dict) -> str:
-    ctx.memory.add(args.get("note", ""))
-    return "Saved to memory."
+    ctx.memory.add(args.get("note", ""), args.get("kind") or "fact", args.get("replaces") or "")
+    return "Saved to memory." + (" (Replaced the older note.)" if args.get("replaces") else "")
+
+
+def recall(ctx: ToolContext, args: dict) -> str:
+    """Everything remembered that matches, and matching documents on this computer."""
+    query = " ".join(str(args.get("query") or "").split())
+    if not query:
+        raise ToolError("Say what to look for.")
+    found = ctx.memory.search(query)
+    lines = [f"- ({n.get('kind', 'fact')}, {n.get('added', '')}) {n['note']}" for n in found]
+    return "From memory:\n" + "\n".join(lines) if lines else f"Nothing in memory about “{query}”."
 
 
 def forget(ctx: ToolContext, args: dict) -> str:
@@ -874,13 +1027,32 @@ TOOLS: dict[str, Tool] = {t.name: t for t in [
          ["target"], READ, open_item, lambda a: f"Opened {_short(a.get('target', ''), 50)}", icon="external"),
     Tool("list_windows", "List open windows", "The windows open on the desktop right now.",
          {}, [], READ, list_windows, lambda a: "Checked the open windows", icon="window"),
-    Tool("fetch_url", "Read a web page", "Download a web page or text file (docs, datasheets, READMEs) as plain text.",
-         {"url": _p("http(s) address")}, ["url"], READ, fetch_url, lambda a: f"Read {_short(a.get('url', ''), 55)}",
-         icon="globe"),
-    Tool("remember", "Remember", "Save a short lasting note about the person or their projects (their board, "
-         "preferred language, where projects live). Not for passwords or one-off details.",
-         {"note": _p("The note, one sentence")}, ["note"], READ, remember,
+    Tool("fetch_url", "Read a web page", "Download a web page or text file (docs, datasheets, READMEs) as plain text. "
+         "Set links to also get the page's links, to follow them (advanced browsing).",
+         {"url": _p("http(s) address"), "links": _p("Also list the page's links", "boolean")}, ["url"], READ, fetch_url,
+         lambda a: f"Read {_short(a.get('url', ''), 55)}", icon="globe"),
+    Tool("research", "Research", "Search the web and read the top pages in one step (default 3, up to 5). Best for "
+         "questions that need current or detailed information; cite the addresses you used.",
+         {"query": _p("What to research"), "pages": _p("How many pages to read (1-5)", "integer")}, ["query"], READ,
+         research, lambda a: f"Researched “{_short(a.get('query', ''), 40)}”", icon="search"),
+    Tool("search_documents", "Search your documents", "Search the words in the person's documents and files "
+         "(Documents, Desktop, Downloads, Projects, the workspace: text, code, PDFs, Word and LibreOffice files, "
+         "slides). Returns paths and matching snippets.",
+         {"query": _p("Words to look for")}, ["query"], READ, search_documents,
+         lambda a: f"Searched your files for “{_short(a.get('query', ''), 40)}”", icon="folder"),
+    Tool("read_document", "Read a document", "Read a document as text: PDF, .docx, .odt, .pptx, .odp, .rtf or any "
+         "text file.", {"path": _p("File path")}, ["path"], READ, read_document,
+         lambda a: f"Read {a.get('path', '')}", icon="folder"),
+    Tool("remember", "Remember", "Save a short lasting note about the person: a preference (how they like answers, "
+         "units, favorite apps, music, sites, work hours), a fact (their board, printer, pets' names), a project, a "
+         "person they mention, or a habit. Save preferences you notice without asking. When something changed, pass "
+         "replaces with words from the old note. Never passwords, keys or one-off details.",
+         {"note": _p("The note, one sentence"), "kind": _p("preference, fact, project, person or habit"),
+          "replaces": _p("Optional: words from an older note this one replaces")}, ["note"], READ, remember,
          lambda a: f"Remembered: {_short(a.get('note', ''), 50)}", icon="star"),
+    Tool("recall", "Recall", "Search everything you remember about the person (more than the notes shown to you).",
+         {"query": _p("What to look for")}, ["query"], READ, recall,
+         lambda a: f"Recalled {_short(a.get('query', ''), 40)}", icon="star"),
     Tool("forget", "Forget", "Remove notes from memory that mention some text, when the person asks you to forget "
          "something.", {"about": _p("Text the notes to forget contain")}, ["about"], READ, forget,
          lambda a: f"Forgot notes about {_short(a.get('about', ''), 40)}", icon="star"),
@@ -916,6 +1088,24 @@ TOOLS: dict[str, Tool] = {t.name: t for t in [
          {}, [], READ, list_scheduled, lambda a: "Checked reminders and routines", icon="clock"),
     Tool("cancel_scheduled", "Cancel a reminder or routine", "Cancel a reminder or routine by its id (list_scheduled).",
          {"id": _p("The id")}, ["id"], READ, cancel_scheduled, lambda a: f"Cancelled {a.get('id', '')}", icon="clock"),
+    Tool("make_tool", "Make a tool", "Make yourself a new tool when no tool fits and the job will come up again (a "
+         "weather lookup, a converter, a home-automation call...). Write Python: main.py reads its arguments as JSON "
+         "from stdin and prints the result. Then test it with test_tool; after a passing test it's yours as my_<name>. "
+         "Same name again replaces it (to fix it).",
+         {"name": _p("lowercase_with_underscores"), "description": _p("One sentence: what it does and when to use it"),
+          "params": _p("Its arguments, as an object: {\"city\": \"Which city\"}", "object"), "code": _p("main.py")},
+         ["name", "description", "code"], WRITE, make_tool, lambda a: f"Made the {a.get('name', '')} tool",
+         detail=lambda a: clip(a.get("code", ""), 3000), icon="tool"),
+    Tool("test_tool", "Test a tool", "Run a tool you made with sample arguments, to see that it works.",
+         {"name": _p("The tool's name (without my_)"), "args": _p("Arguments, as an object", "object")},
+         ["name"], RUN, test_tool, lambda a: f"Tested the {a.get('name', '')} tool",
+         detail=lambda a: json.dumps(a.get("args") or {})[:2000], icon="tool"),
+    Tool("remove_tool", "Remove a tool", "Delete a tool you made.", {"name": _p("The tool's name (without my_)")},
+         ["name"], WRITE, remove_tool, lambda a: f"Removed the {a.get('name', '')} tool", icon="tool"),
+    Tool("consult_expert", "Ask the expert helper", "Ask your expert helper model (set in Settings › Vara, e.g. "
+         "Claude) to write or debug code, or for a second opinion on something hard. Include the code.",
+         {"question": _p("What to ask"), "code": _p("Code it should look at (optional)")}, ["question"], READ,
+         consult_expert, lambda a: f"Asked the expert: {_short(a.get('question', ''), 45)}", icon="sparkle"),
     Tool("load_skill", "Load a skill", "Read one of your skills (step-by-step know-how) before a task it covers.",
          {"name": _p("Skill name from the list")}, ["name"], READ, load_skill,
          lambda a: f"Loaded the {a.get('name', '')} skill", icon="sparkle"),

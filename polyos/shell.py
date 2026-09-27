@@ -210,6 +210,40 @@ class DesktopShell(Backend):
         win.add(win.view)
         return win
 
+    # ---- the HUD: the assistant's full-screen interface (surface=hud) ----
+    def _show_hud(self, show: bool) -> None:
+        GLib.idle_add(self._show_hud_main, show)
+
+    def _show_hud_main(self, show: bool):
+        win = getattr(self, "hud_window", None)
+        if not show:
+            if win is not None:
+                win.destroy()
+                self.hud_window = None
+            return False
+        if win is None:  # like the other surfaces, except that closing it (Alt+F4) closes the HUD
+            win = Gtk.Window(title="PolyOS HUD")
+            win.set_wmclass("polyos-hud", "PolyOS")
+            win.set_decorated(False)
+            win.set_skip_taskbar_hint(True)
+            visual = self.gdk_screen.get_rgba_visual()
+            if self.composited and visual is not None:
+                win.set_visual(visual)
+                win.set_app_paintable(True)
+            win.connect("delete-event", lambda *_: (self.hud(False), True)[1])
+            win.view = self._view("surface=hud", self.composited and visual is not None)
+            win.add(win.view)
+            win.set_keep_above(True)
+            self.hud_window = win
+        geo = self._geometry()
+        win.move(geo.x, geo.y)
+        win.resize(geo.width, geo.height)
+        win.show_all()
+        win.fullscreen()
+        win.present_with_time(self._x_time())
+        win.view.grab_focus()
+        return False
+
     def _geometry(self) -> Gdk.Rectangle:
         display = Gdk.Display.get_default()
         monitor = display.get_primary_monitor() or display.get_monitor(0)

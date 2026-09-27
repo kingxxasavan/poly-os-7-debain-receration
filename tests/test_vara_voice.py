@@ -143,6 +143,47 @@ class VoiceTests(unittest.TestCase):
         a.announced({"kind": "reminder", "text": "Reminder: stretch"})
         self.assertEqual(self.speaker.said, [])
 
+    def test_a_name_of_your_own(self):
+        a = Assistant(self.shell, self.speaker, object(), FakeRecognizer, name="Jarvis")
+        a.feed(b"hey vera|")
+        self.assertEqual(a.state, "idle")  # it answers to its own name now
+        a.feed(b"hey jarvis|")
+        self.assertEqual(a.state, "listening")
+        a.feed(b"jarvis open files|")
+        self.assertEqual(self.asked(), ["open files"])
+        self.assertEqual(vara_voice.clean_name("J4rv1s!"), "jrvs")
+        self.assertEqual(vara_voice.clean_name(""), "vera")
+
+    def test_follow_up_needs_no_name(self):
+        self.hear("hey vera|", "what's the weather|")
+        self.a.announced({"kind": "reply", "text": "Sunny, 22 degrees."})
+        self.hear("")  # the answer has been said: a follow-up window opens, without a chime
+        self.assertEqual((self.a.state, self.a.followup, self.speaker.chimes), ("listening", True, 1))
+        self.hear("and tomorrow|")
+        self.assertEqual(self.asked(), ["what's the weather", "and tomorrow"])
+        self.a.announced({"kind": "reply", "text": "Rain tomorrow."})
+        self.hear("", "that's all thanks|")
+        self.assertEqual(self.a.state, "idle")
+        self.assertEqual(len(self.asked()), 2)
+
+    def test_follow_up_ends_after_quiet(self):
+        self.a.announced({"kind": "reply", "text": "Done."})
+        self.hear("")
+        self.a.until = 0  # the window passed with nobody speaking
+        self.hear("")
+        self.assertEqual(self.a.state, "idle")
+        self.hear("open firefox|")  # ordinary talk after that needs the name again
+        self.assertEqual(self.asked(), [])
+
+    def test_always_listening(self):
+        a = Assistant(self.shell, self.speaker, object(), FakeRecognizer, open_mic=True)
+        a.feed(b"open the calculator|")
+        self.assertEqual(self.asked(), ["open the calculator"])
+        a.state = "idle"
+        self.speaker.current = "here is the calculator"  # not while Vara itself is talking
+        a.feed(b"here is the calculator|")
+        self.assertEqual(len(self.asked()), 1)
+
     def test_words(self):
         self.assertEqual(after_wake("hey vera open the browser"), "open the browser")
         self.assertTrue(has_words("okay vera stop", vara_voice.STOP))

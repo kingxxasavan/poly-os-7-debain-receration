@@ -57,12 +57,14 @@ export default function vara(root) {
     if (label) fill(voiceBar, h('span.va-orb', h('i'), h('i'), h('i')), h('b', label), v.text ? h('span', v.text) : null);
   }
   let voice = null;
-  api.get('/api/vara/voice').then((v) => { voice = v; showVoice(v); }, () => {});
+  const title = h('b', 'Vara');
+  api.get('/api/vara/voice').then((v) => { voice = v; showVoice(v); title.textContent = v.name || 'Vara'; }, () => {});
   root.append(
     h('header.va-head',
       h('img.va-logo', { src: '/img/vara.png', alt: '' }),
-      h('div.va-title', h('b', 'Vara'), h('small', 'Your PolyOS assistant: voice, web, apps, code, 3D and robots')),
+      h('div.va-title', title, h('small', 'Your PolyOS assistant: voice, web, apps, code, 3D and robots')),
       stopBtn,
+      h('button.icon-btn.round', { title: 'Open the HUD (Win+J)', onclick: () => { api.post('/api/hud', { open: true }).catch(() => {}); closePopup(); } }, icon('maximize')),
       h('button.icon-btn.round', { title: 'New chat', onclick: reset }, icon('refresh')),
       h('button.icon-btn.round', { title: 'Vara settings', onclick: () => { openSettings('vara'); closePopup(); } }, icon('settings'))),
     voiceBar,

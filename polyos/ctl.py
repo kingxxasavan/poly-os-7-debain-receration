@@ -78,7 +78,7 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("cloud", help="open a cloud gaming service (geforcenow, xcloud, luna, boosteroid)")
     p.add_argument("service")
     p = sub.add_parser("vara", help="Vara Voice: listen now (push to talk)")
-    p.add_argument("action", choices=["listen"])
+    p.add_argument("action", choices=["listen", "hud"])
     p = sub.add_parser("dev", help="developer mode: on | off (off also rescues a broken interface)")
     p.add_argument("state", choices=["on", "off"])
     args = parser.parse_args(argv)
@@ -102,6 +102,8 @@ def main(argv: list[str] | None = None) -> int:
             call("POST", "/api/popup", {"view": "start", "toggle": True})
         elif args.command == "popup":
             call("POST", "/api/popup", {"view": args.view})
+        elif args.command == "vara" and args.action == "hud":
+            call("POST", "/api/hud", {"open": True})
         elif args.command == "vara":
             try:
                 call("POST", "/api/vara/voice/listen", {})

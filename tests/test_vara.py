@@ -585,3 +585,172 @@ class WebAndMemoryToolTests(unittest.TestCase):
         self.assertEqual(vara_tools._web_address("https://x.org/a?b=1"), "https://x.org/a?b=1")
         with self.assertRaises(ToolError):
             vara_tools._web_address("file:///etc/passwd")
+
+
+class AdaptiveMemoryTests(unittest.TestCase):
+    def test_preferences_update_and_come_first(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            memory = Memory(Path(tmp) / "memory.json")
+            for n in range(80):
+                memory.add(f"Project note {n}", "project")
+            memory.add("Likes answers in metric units", "preference")
+            memory.add("Prefers short answers", "preference")
+            memory.add("Prefers detailed answers with examples", "preference", replaces="short answers")
+            notes = [n["note"] for n in memory.notes()]
+            self.assertNotIn("Prefers short answers", notes)
+            context = memory.for_context()
+            self.assertEqual([n["note"] for n in context[:2]], ["Likes answers in metric units", "Prefers detailed answers with examples"])
+            self.assertEqual(len(context), 60)
+            self.assertEqual(memory.search("which units does she like")[0]["note"], "Likes answers in metric units")
+            ctx = ToolContext(home=Path(tmp), workspace=Path(tmp), memory=memory)
+            self.assertIn("Project note 3", vara_tools.TOOLS["recall"].run(ctx, {"query": "project note 3"}))
+
+    def test_habits(self):
+        import datetime
+
+        from polyos.vara_skills import Habits, habit_summary
+        with tempfile.TemporaryDirectory() as tmp:
+            habits = Habits(Path(tmp) / "habits.json")
+            for day in range(5):
+                habits.opened("VS Code", datetime.datetime(2026, 9, 20 + day, 21, 0))
+            habits.opened("Firefox", datetime.datetime(2026, 9, 20, 9, 0))
+            self.assertEqual(habit_summary(habits), ["- Opens VS Code often (5 times), mostly evenings"])
+
+    def test_launches_feed_habits_only_with_activity_history(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            be = MockBackend(Settings(Path(tmp) / "s.json"), EventBus(), home=Path(tmp) / "home")
+            app = be.apps()[0]
+            be.note_launch(app["id"])
+            self.assertEqual(be.vara.habits.load()[app["name"]]["count"], 1)
+            be.update_settings({"keepRecent": False})
+            self.assertEqual(be.vara.habits.load(), {})
+            be.note_launch(app["id"])
+            self.assertEqual(be.vara.habits.load(), {})
+
+
+class DocumentIndexTests(unittest.TestCase):
+    def setUp(self):
+        import zipfile
+        from polyos.vara_index import DocIndex
+        self.tmp = tempfile.TemporaryDirectory()
+        self.home = Path(self.tmp.name)
+        docs = self.home / "Documents"
+        (docs / "school").mkdir(parents=True)
+        (docs / "school" / "essay.md").write_text("# Photosynthesis\nPlants turn sunlight into sugar.")
+        with zipfile.ZipFile(docs / "invoice.docx", "w") as zf:
+            zf.writestr("word/document.xml", "<w:document><w:p><w:t>Invoice for the Arduino workshop</w:t></w:p>"
+                                             "<w:p><w:t>Total: 120 euros</w:t></w:p></w:document>")
+        with zipfile.ZipFile(docs / "talk.pptx", "w") as zf:
+            zf.writestr("ppt/slides/slide1.xml", "<p:sld><a:p><a:t>Robot arm kinematics</a:t></a:p></p:sld>")
+        (docs / ".secret").mkdir()
+        (docs / ".secret" / "hidden.txt").write_text("photosynthesis hidden")
+        (self.home / ".ssh").mkdir()
+        (self.home / ".ssh" / "notes.txt").write_text("photosynthesis key")
+        (self.home / "Desktop").symlink_to(self.home / ".ssh")  # a private folder by another way in
+        self.index = DocIndex(self.home / ".local/share/polyos/vara/index.db", self.home, vara_tools.PRIVATE)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_index_and_search(self):
+        result = self.index.update(self.index.roots())
+        self.assertEqual((result["added"], result["finished"]), (3, True))
+        found = self.index.search("photosynthesis")
+        self.assertEqual([Path(f["path"]).name for f in found], ["essay.md"])  # not hidden or private copies
+        self.assertIn("«Photosynthesis»", found[0]["snippet"])
+        self.assertEqual(Path(self.index.search("arduino invoice")[0]["path"]).name, "invoice.docx")
+        self.assertEqual(Path(self.index.search("kinematics")[0]["path"]).name, "talk.pptx")
+        self.assertEqual(self.index.update(self.index.roots())["added"], 0)  # nothing changed
+        (self.home / "Documents" / "school" / "essay.md").unlink()
+        self.assertEqual(self.index.update(self.index.roots())["removed"], 1)
+        self.assertEqual(self.index.search("photosynthesis"), [])
+        self.assertEqual(self.index.stats()["files"], 2)
+
+    def test_budget_carries_on_next_time(self):
+        first = self.index.update(self.index.roots(), max_files=1)
+        self.assertEqual((first["added"], first["finished"]), (1, False))
+        self.assertEqual(self.index.update(self.index.roots())["added"], 2)
+
+    def test_tools(self):
+        self.index.update(self.index.roots())
+        ctx = ToolContext(home=self.home, workspace=self.home, index=self.index)
+        self.assertIn("Documents/invoice.docx", vara_tools.TOOLS["search_documents"].run(ctx, {"query": "workshop"}))
+        self.assertIn("Total: 120 euros", vara_tools.TOOLS["read_document"].run(ctx, {"path": "~/Documents/invoice.docx"}))
+        with self.assertRaises(ToolError):
+            vara_tools.TOOLS["read_document"].run(ctx, {"path": "~/.ssh/notes.txt"})
+
+    def test_page_links(self):
+        page = '<a href="/docs/start">Get <b>started</b></a> <a href="#top">Top</a> <a href="https://x.org/a">X</a> <a href="/docs/start">again</a>'
+        self.assertEqual(vara_tools.page_links(page, "https://example.com/index.html"),
+                         [("Get started", "https://example.com/docs/start"), ("X", "https://x.org/a")])
+
+
+class ToolMakerTests(unittest.TestCase):
+    """Vara makes a tool, tests it, and then has it as my_<name>; the expert helper answers coding questions."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        root = Path(self.tmp.name)
+        self.backend = MockBackend(Settings(root / "settings.json"), EventBus(), home=root / "home")
+        self.vara = self.backend.vara
+        self.home = self.backend.files.home
+        self.vara.config.update(None, None, None, approval="auto")  # these tests aren't about approvals
+
+    def tearDown(self):
+        self.vara.stop()
+        self.vara.wait(5)
+        self.tmp.cleanup()
+
+    def test_make_test_and_use(self):
+        code = "import json, sys\nargs = json.load(sys.stdin)\nprint(round(args['c'] * 9 / 5 + 32, 1))\n"
+        fake = FakeModel()
+        self.addCleanup(fake.close)
+        fake.replies = [
+            call("make_tool", 1, name="to_fahrenheit", description="Celsius to Fahrenheit", params={"c": "Degrees C"},
+                 code="print(1/0)"),
+            call("test_tool", 2, name="to_fahrenheit", args={"c": 20}),
+            call("make_tool", 3, name="to_fahrenheit", description="Celsius to Fahrenheit", params={"c": "Degrees C"}, code=code),
+            call("test_tool", 4, name="to_fahrenheit", args={"c": 20}),
+            {"content": "Made it."},
+            call("my_to_fahrenheit", 5, c=100),
+            {"content": "212."},
+        ]
+        self.vara.config.update(fake.url, "test-model", "sk-secret")
+        self.vara.chat(self.backend, "make a converter")
+        state = self.vara.wait(20)
+        outputs = [h["output"] for h in state["history"] if h["role"] == "step"]
+        self.assertIn("ZeroDivisionError", outputs[1])
+        self.assertIn("68.0", outputs[3])
+        self.assertIn("The test passed", outputs[3])
+        self.vara.chat(self.backend, "convert 100")
+        state = self.vara.wait(20)
+        step = [h for h in state["history"] if h["role"] == "step"][-1]
+        self.assertEqual((step["tool"], step["output"].strip()), ("my_to_fahrenheit", "212.0"))
+        names = [t["function"]["name"] for t in fake.requests[-1]["tools"]]
+        self.assertIn("my_to_fahrenheit", names)
+        self.assertNotIn("consult_expert", names)  # no expert helper set up
+
+    def test_bad_tools_are_refused(self):
+        from polyos import vara_toolmaker
+        for bad in ({"name": "Bad Name"}, {"name": "read_file"}, {"code": "def (:"}, {"description": ""}):
+            spec = {"name": "okay_tool", "description": "Does a thing", "params": {}, "code": "print(1)", **bad}
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                vara_toolmaker.make(self.home, spec["name"], spec["description"], spec["params"], spec["code"], set(vara_tools.TOOLS))
+
+    def test_expert_helper(self):
+        expert = FakeModel()
+        self.addCleanup(expert.close)
+        expert.replies = [{"content": "Use a context manager: with open(p) as f: ..."}]
+        self.vara.config.update(None, None, None, expert={"endpoint": expert.url.replace("http://", "https://"), "model": "claude-x", "key": "sk-exp"})
+        self.assertTrue(self.vara.config.public()["hasExpertKey"])
+        cfg = self.vara.config.expert()
+        cfg["endpoint"] = expert.url  # the stand-in speaks plain http
+        cfg["provider"] = "openai"
+        ctx = ToolContext(home=self.home, workspace=self.home, expert=cfg)
+        answer = vara_tools.TOOLS["consult_expert"].run(ctx, {"question": "Why does this leak?", "code": "f = open(p)"})
+        self.assertIn("context manager", answer)
+        self.assertIn("f = open(p)", expert.requests[0]["messages"][1]["content"])
+        with self.assertRaises(ApiError):
+            self.vara.config.update(None, None, None, expert={"endpoint": "http://plain.example", "model": "m"})
+        self.vara.config.update(None, None, None, expert={"endpoint": ""})
+        self.assertIsNone(self.vara.config.expert())

@@ -396,7 +396,7 @@ def reboot() -> None:
 
 # Vara Voice: offline speech recognition (Vosk, a small English model) and a natural voice (Piper),
 # in their own Python environment, plus the tools Vara's browser and media control use.
-VOICE_PACKAGES = ["espeak-ng", "xdotool", "xclip", "playerctl", "pipewire-bin", "python3-venv"]
+VOICE_PACKAGES = ["espeak-ng", "xdotool", "xclip", "playerctl", "pipewire-bin", "python3-venv", "poppler-utils"]
 VOICE_PIP = ["vosk>=0.3.45,<0.4", "piper-tts>=1.3,<2"]
 VOSK_MODEL_URL = "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
 PIPER_VOICE_URL = "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx"

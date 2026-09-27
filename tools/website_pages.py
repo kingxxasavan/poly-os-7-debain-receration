@@ -165,7 +165,7 @@ page("download", "Download PolyOS 7", "Download the PolyOS 7 live USB and instal
     </section>""", scripts=("/assets/site.js",))
 
 # ---- Documentation ---------------------------------------------------------------------------
-SHORTCUTS = [("Win", "Home Menu"), ("Win + S", "All apps"), ("Win + A", "Quick settings"), ("Win + W", "Widgets"), ("Win + V", "Ask Vara"),
+SHORTCUTS = [("Win", "Home Menu"), ("Win + S", "All apps"), ("Win + A", "Quick settings"), ("Win + W", "Widgets"), ("Win + V", "Ask Vara"), ("Win + Shift + V", "Talk to Vara"), ("Win + J", "The assistant's HUD"),
              ("Win + R", "Run"), ("Win + I", "Settings"), ("Win + E", "Files"), ("Win + T", "Terminal"), ("Win + B", "Browser"),
              ("Win + L", "Lock"), ("Win + D", "Show the desktop"), ("Win + F", "Full screen on and off"), ("Win + ↑", "Maximize"),
              ("Win + ← / →", "Snap left or right"), ("Ctrl + Shift + Esc", "Task Manager"), ("Alt + Tab", "Switch windows"), ("Print", "Screenshot")]
@@ -202,8 +202,15 @@ page("docs", "Documentation · PolyOS 7", "How to install, use and update PolyOS
                          '<li><b>Recovery</b>: a verified email resets your password; so does a recovery key from <a href="/account#recovery">Poly Account › Recovery</a>.</li>'
                          '<li><b>Poly Sync</b> keeps settings, theme, wallpapers and pinned apps the same on your computers. Files aren’t synced.</li></ul>'),
         ("Keyboard shortcuts", f'<table class="guide-table"><thead><tr><th>Keys</th><th>What it does</th></tr></thead><tbody>{shortcut_rows}</tbody></table>'),
-        ("Vara", '<p>Vara, the AI agent, writes and runs code, makes 3D models and works with ROS 2 robots and Arduino boards, asking before it changes anything. '
-                 'Choose its provider (Ollama Cloud, OpenAI, NVIDIA or Claude) in Settings › Vara.</p>'),
+        ("Vara", '<p>Vara is the PolyOS assistant and AI agent. It searches the web and drives your browser, plays music, sets reminders and '
+                 'routines that run on their own, searches your documents, remembers your preferences, writes itself new tools, and '
+                 'writes and runs code, makes 3D models and works with ROS 2 robots and Arduino boards, asking before it changes anything. '
+                 'Choose its provider (Ollama Cloud, OpenAI, NVIDIA or Claude) in Settings › Vara.</p>'
+                 '<ul><li><b>Voice</b>: say “Hey Vera”, or give it a name of its own (Settings › Vara › Name; “Jarvis” answers to “Hey Jarvis”). '
+                 'Speech is recognized on your computer. Ask follow-ups without the name; say “stop” to interrupt. Offered with the Developer edition, '
+                 'or install it from Settings › Vara › Voice.</li>'
+                 '<li><b>The HUD</b>: a full-screen interface that opens when it hears its name, or with Win+J.</li>'
+                 '<li><b>Expert helper</b>: a second model (such as Claude) Vara asks for help with hard code.</li></ul>'),
     ]), icons=("info",))
 
 # ---- Updates / changelog ----------------------------------------------------------------------

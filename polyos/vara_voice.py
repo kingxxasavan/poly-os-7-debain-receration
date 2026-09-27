@@ -1,4 +1,6 @@
-"""Vara Voice: talk to Vara. "Hey Vera", then ask; Vara answers out loud. "Stop" interrupts.
+"""Vara Voice: talk to Vara. "Hey Vera" (or the name you gave it: "Hey Jarvis"), then ask; Vara
+answers out loud and keeps listening for a follow-up, so a conversation doesn't need the name every
+time. "Stop" interrupts. An opt-in "always listening" mode acts on anything said, no name at all.
 
 An optional part of PolyOS (Settings > Vara > Voice, offered when setting up the Developer
 edition), installed by `polyos-admin vara-voice install` into VOICE_HOME:
@@ -42,13 +44,27 @@ RATE = 16000
 CHUNK = 4000  # bytes: 0.125 s of 16-bit mono audio
 
 # The model's vocabulary has "vera" (and not "vara"), which sounds the same.
+DEFAULT_NAME = "vera"
 WAKE = ("hey vera", "okay vera", "ok vera", "hi vera", "vera")
+DONE = ("that's all", "that is all", "that's it", "thanks that's all", "thank you", "thanks", "goodbye", "bye",
+        "no thanks", "nothing", "all good", "never mind")
+FOLLOW_SECONDS = 7  # after an answer: time to ask a follow-up without the name
 STOP = ("stop", "cancel", "never mind", "nevermind", "be quiet", "quiet", "shut up", "that's enough", "enough")
 YES = ("yes", "yeah", "yep", "sure", "okay", "ok", "do it", "go ahead", "allow", "please do")
 NO = ("no", "nope", "don't", "do not", "deny")
 ALWAYS = ("always",)
 LISTEN_SECONDS = 9  # how long a request may take after "Hey Vera"
 CONFIRM_SECONDS = 20
+
+
+def wake_phrases(name: str) -> tuple[str, ...]:
+    return (f"hey {name}", f"okay {name}", f"ok {name}", f"hi {name}", name)
+
+
+def clean_name(name: str | None) -> str:
+    """The name the assistant answers to (one word, lower case); the default is "vera"."""
+    word = re.sub(r"[^a-z]", "", str(name or "").lower())
+    return word if 2 <= len(word) <= 20 else DEFAULT_NAME
 
 
 def installed() -> bool:
@@ -60,11 +76,11 @@ def has_words(text: str, phrases) -> bool:
     return any(f" {p} " in text for p in phrases)
 
 
-def after_wake(text: str) -> str:
+def after_wake(text: str, name: str = DEFAULT_NAME) -> str:
     """ "hey vera open firefox" -> "open firefox" (what came after the wake words)."""
     words = text.lower().split()
     for n in range(len(words)):
-        if words[n] == "vera":
+        if words[n] == name:
             return " ".join(words[n + 1:])
     return text.strip()
 
@@ -141,19 +157,21 @@ class Shell:
 
 
 # ---- sound in and out ----------------------------------------------------------------------------
+# parec/paplay (pulseaudio-utils, which PolyOS always has; PipeWire serves them) take raw audio on
+# stdin/stdout for sure; pw-record/pw-play and ALSA are the fallbacks.
 def record_command() -> list[str]:
-    if shutil.which("pw-record"):
-        return ["pw-record", "--rate", str(RATE), "--channels", "1", "--format", "s16", "-"]
     if shutil.which("parec"):
-        return ["parec", "--raw", f"--rate={RATE}", "--channels=1", "--format=s16le"]
+        return ["parec", "--raw", f"--rate={RATE}", "--channels=1", "--format=s16le", "--latency-msec=60"]
+    if shutil.which("pw-record"):
+        return ["pw-record", "--raw", "--rate", str(RATE), "--channels", "1", "--format", "s16", "-"]
     return ["arecord", "-q", "-f", "S16_LE", "-r", str(RATE), "-c", "1", "-t", "raw"]
 
 
 def play_command(rate: int) -> list[str]:
-    if shutil.which("pw-play"):
-        return ["pw-play", "--rate", str(rate), "--channels", "1", "--format", "s16", "-"]
     if shutil.which("paplay"):
         return ["paplay", "--raw", f"--rate={rate}", "--channels=1", "--format=s16le"]
+    if shutil.which("pw-play"):
+        return ["pw-play", "--raw", "--rate", str(rate), "--channels", "1", "--format", "s16", "-"]
     return ["aplay", "-q", "-f", "S16_LE", "-r", str(rate), "-c", "1", "-t", "raw"]
 
 
@@ -252,34 +270,47 @@ class Assistant:
     """idle (waiting for "Hey Vera") -> listening (the request) -> waiting (Vara works; "stop" works)
     -> confirming (a yes or no for an approval) -> idle."""
 
-    def __init__(self, shell: Shell, speaker: Speaker, model, recognizer, speak_replies: bool = True, wake: bool = True):
+    def __init__(self, shell: Shell, speaker: Speaker, model, recognizer, speak_replies: bool = True, wake: bool = True,
+                 name: str = DEFAULT_NAME, follow_up: bool = True, open_mic: bool = False):
         self.shell = shell
         self.speaker = speaker
         self.model = model
         self.Recognizer = recognizer
         self.speak_replies = speak_replies
         self.wake_enabled = wake
-        grammar = sorted({*WAKE, *STOP, "[unk]"})
+        self.name = clean_name(name)
+        self.follow_up = follow_up
+        self.open_mic = open_mic
+        grammar = sorted({*wake_phrases(self.name), *STOP, "[unk]"})
         self.wake = recognizer(model, RATE, json.dumps(grammar))
         self.answers = recognizer(model, RATE, json.dumps(sorted({*YES, *NO, *ALWAYS, *STOP, "[unk]"})))
+        self.anything = recognizer(model, RATE) if open_mic else None  # always listening: every sentence
         self.request = None
         self.state = "idle"
         self.until = 0.0
+        self.followup = False  # the request being heard is a follow-up (no name, no chime)
+        self.follow_pending = False  # an answer was given: listen for a follow-up once it's been said
         self.step = None  # the approval being answered
         self.last_said = 0
 
     # sound -> state machine
     def feed(self, chunk: bytes) -> None:
         now = time.monotonic()
+        if self.state == "idle" and self.follow_pending and not self.speaker.speaking:
+            self.follow_pending = False  # the answer has been said: listen for a follow-up, no name needed
+            self.start_request(followup=True)
         if self.state == "listening":
             done = self.request.AcceptWaveform(chunk)
-            if done or now > self.until:
+            partial = "" if done else json.loads(self.request.PartialResult()).get("partial", "")
+            if self.followup and not done and not partial and now > self.until:
+                self.end_conversation()  # nobody said anything more
+            elif done or (now > self.until and not self.followup) or now > self.until + LISTEN_SECONDS:
                 text = json.loads(self.request.FinalResult() if not done else self.request.Result()).get("text", "")
+                if done and not text.strip() and self.followup and now <= self.until:
+                    return  # a noise; keep waiting for the follow-up
                 self.heard(text)
-            else:
-                partial = json.loads(self.request.PartialResult()).get("partial", "")
-                if partial:
-                    self.shell.status("listening", partial)
+            elif partial:
+                self.shell.status("listening", partial)
             return
         if self.state == "confirming":
             if self.answers.AcceptWaveform(chunk):
@@ -287,6 +318,13 @@ class Assistant:
             elif now > self.until:
                 self.state = "waiting"
             return
+        # always listening: any sentence is a request (not while Vara itself is talking)
+        if self.anything is not None and self.state == "idle" and not self.speaker.speaking:
+            if self.anything.AcceptWaveform(chunk):
+                said = json.loads(self.anything.Result()).get("text", "").strip()
+                if len(said.split()) >= 2 and not has_words(said, STOP):
+                    self.heard(said)
+                    return
         # idle or waiting: only the wake words and "stop"
         if self.wake.AcceptWaveform(chunk):
             text = json.loads(self.wake.Result()).get("text", "")
@@ -295,7 +333,7 @@ class Assistant:
         if not text:
             return
         own = self.speaker.current  # the microphone hears Vara too: its own words aren't commands
-        named = has_words(text, ("vera",)) and not has_words(own, ("vera",))
+        named = has_words(text, (self.name,)) and not has_words(own, (self.name,))
         if has_words(text, STOP) and (self.speaker.speaking or self.state == "waiting") and \
                 (named or not has_words(own, STOP)):
             self.interrupt()
@@ -306,22 +344,39 @@ class Assistant:
         """Hey Vera (or the push-to-talk shortcut): a chime, then the request."""
         self.speaker.stop()
         self.wake.Reset()
-        self.request = self.Recognizer(self.model, RATE)
-        self.state = "listening"
-        self.until = time.monotonic() + LISTEN_SECONDS
+        self.start_request()
         self.speaker.play(chime(True))
         self.shell.status("listening")
 
+    def start_request(self, followup: bool = False) -> None:
+        self.request = self.Recognizer(self.model, RATE)
+        self.state = "listening"
+        self.followup = followup
+        self.until = time.monotonic() + (FOLLOW_SECONDS if followup else LISTEN_SECONDS)
+        if followup:
+            self.shell.status("listening", "")
+
+    def end_conversation(self) -> None:
+        self.request = None
+        self.state = "idle"
+        self.followup = False
+        self.shell.status("idle")
+
     def heard(self, text: str) -> None:
-        text = after_wake(text) if has_words(text, ("vera",)) else text.strip()
+        text = after_wake(text, self.name) if has_words(text, (self.name,)) else text.strip()
+        followup, self.followup = self.followup, False
         self.request = None
         if not text or text in ("the", "huh"):
             self.state = "idle"
-            self.speaker.play(chime(False))
+            if not followup:
+                self.speaker.play(chime(False))
             self.shell.status("idle")
             return
         if has_words(text, STOP) and len(text.split()) <= 3:
             self.interrupt()
+            return
+        if followup and any(text == d or text.startswith(d + " ") for d in DONE):
+            self.end_conversation()  # "that's all, thanks"
             return
         self.state = "waiting"
         self.shell.status("thinking", text)
@@ -333,6 +388,8 @@ class Assistant:
             self.speaker.say(str(exc) if "still working" in str(exc) else "I can't reach PolyOS right now.")
 
     def interrupt(self) -> None:
+        self.follow_pending = False
+        self.followup = False
         self.speaker.stop()
         try:
             self.shell.stop()
@@ -371,6 +428,7 @@ class Assistant:
             return
         if kind == "reply":
             self.state = "idle"
+            self.follow_pending = self.follow_up  # after it's said, a follow-up needs no name
             self.shell.status("speaking" if self.speak_replies else "idle", item.get("text", ""))
         if self.speak_replies:
             self.speaker.say(item.get("text", ""))
@@ -389,6 +447,9 @@ def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     speak_replies = "--quiet" not in argv
     wake = "--no-wake" not in argv  # push-to-talk only
+    follow_up = "--no-follow-up" not in argv
+    open_mic = "--open-mic" in argv
+    name = clean_name(argv[argv.index("--name") + 1] if "--name" in argv[:-1] else DEFAULT_NAME)
     try:
         from vosk import KaldiRecognizer, Model, SetLogLevel
     except ImportError:
@@ -397,7 +458,14 @@ def main(argv: list[str] | None = None) -> int:
     SetLogLevel(-1)
     model = Model(str(VOSK_MODEL))
     shell = Shell()
-    assistant = Assistant(shell, Speaker(), model, KaldiRecognizer, speak_replies=speak_replies, wake=wake)
+    notice = ""
+    if name != DEFAULT_NAME and model.vosk_model_find_word(name) < 0:  # a word the speech model doesn't know
+        notice = f"The speech model doesn't know the word “{name}”, so say “Hey Vera” for now, or pick another name."
+        name = DEFAULT_NAME
+    assistant = Assistant(shell, Speaker(), model, KaldiRecognizer, speak_replies=speak_replies, wake=wake,
+                          name=name, follow_up=follow_up, open_mic=open_mic)
+    if notice:
+        shell.status("idle", notice)
     try:  # start after what's already been said
         assistant.last_said = shell.said(0).get("last", 0)
     except (OSError, RuntimeError):

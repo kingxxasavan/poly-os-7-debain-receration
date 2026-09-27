@@ -59,6 +59,8 @@ PACKAGES = {
             "picom", "xcape", "wireplumber | pulseaudio-utils", "network-manager", "brightnessctl", "mesa-utils",
             "papirus-icon-theme", "fonts-inter | fonts-noto-core", "lxpolkit | mate-polkit", "pciutils", "flatpak",
             "playerctl", "libxss1", "power-profiles-daemon", "gstreamer1.0-plugins-good",
+            # Vara: reading PDFs, and driving the web browser (xdotool, xclip)
+            "poppler-utils", "xdotool", "xclip",
         ],
         "summary": "PolyOS desktop shell",
         "description": (

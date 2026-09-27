@@ -17,6 +17,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
+from . import vara_toolmaker
 from .backend import MIXER_TABS, OPEN_APPS, POWER_ACTIONS, RUN_TARGETS
 from .core import IMAGE_TYPES, ApiError
 from .vara import tools_overview
@@ -122,6 +123,7 @@ GET_API = {
     "/api/vara/config": lambda be, q: be.vara.config.public(),
     "/api/vara/said": lambda be, q: be.vara.said(int(_q(q, "after") or 0) if (_q(q, "after") or "0").isdigit() else 0),
     "/api/vara/voice": lambda be, q: be.vara_voice_status(),
+    "/api/hud": lambda be, q: be.hud_data(),
     "/api/admin/status": lambda be, q: be.admin_status(),
     "/api/jobs": lambda be, q: {"jobs": be.jobs.list()},
     "/api/install/probe": lambda be, q: be.install_probe(),
@@ -216,12 +218,17 @@ POST_API = {
                                                  b.get("source") if b.get("source") in ("typed", "voice") else "typed"),
     "/api/vara/voice": lambda be, b: be.vara_voice_state(_str(b, "state", 20), b.get("text") if isinstance(b.get("text"), str) else ""),
     "/api/vara/voice/listen": lambda be, b: be.vara_voice_listen(),
+    "/api/hud": lambda be, b: be.hud(bool(_opt_bool(b, "open"))),
+    "/api/vara/tools/open": lambda be, b: be.vara_tool_open(_str(b, "name", 40)),
+    "/api/vara/index/rebuild": lambda be, b: be.vara_index_rebuild(),
     "/api/vara/voice/install": lambda be, b: be.vara_voice_install(),
     "/api/vara/scheduled/cancel": lambda be, b: (be.vara.schedule.cancel(_str(b, "id", 20)), {"scheduled": be.vara.schedule.items()})[1],
     "/api/vara/reset": lambda be, b: be.vara.reset(),
     "/api/vara/config": lambda be, b: be.vara.config.update(
         _opt_str(b, "endpoint"), _opt_str(b, "model"), b.get("apiKey") if isinstance(b.get("apiKey"), str) else None,
-        _opt_str(b, "workspace"), _opt_str(b, "approval"), _opt_str(b, "provider")),
+        _opt_str(b, "workspace"), _opt_str(b, "approval"), _opt_str(b, "provider"),
+        b.get("expert") if isinstance(b.get("expert"), dict) else None),
+    "/api/vara/tools/remove": lambda be, b: (vara_toolmaker.remove(be.vara.home, _str(b, "name", 40)), tools_overview(be.vara))[1],
     "/api/vara/approve": lambda be, b: be.vara.approve(_str(b, "id", 80), _choice(b, "decision", ("allow", "always", "deny"))),
     "/api/vara/stop": lambda be, b: be.vara.stop(),
     "/api/vara/forget": lambda be, b: {"memory": be.vara.memory.forget(_opt_int(b, "index"))},

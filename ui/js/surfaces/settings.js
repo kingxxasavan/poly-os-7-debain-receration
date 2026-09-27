@@ -887,6 +887,15 @@ const pages = {
       agentNote);
     const toolsBody = h('div');
     const toolsGroup = group('Tools', toolsBody);
+    const madeBody = h('div');
+    const madeGroup = group('Tools it made', madeBody);
+    function showMade(made) {
+      fill(madeBody, made.length ? made.map((t) => row(`my_${t.name}`, `${t.description} · ${t.tested ? 'tested' : 'not working yet'}`,
+        h('div.btn-row',
+          h('button.btn', { onclick: () => api.post('/api/vara/tools/open', { name: t.name }).catch((x) => errorText(err, x.message)) }, 'Open in VS Code'),
+          h('button.btn', { onclick: () => api.post('/api/vara/tools/remove', { name: t.name }).then((r) => showMade(r.made), (x) => errorText(err, x.message)) }, 'Delete'))))
+        : h('p.prose', 'None yet. When a job keeps coming up, Vara writes itself a tool (a small Python program), tests it, and uses it from then on. Ask: “make yourself a tool that…”.'));
+    }
     const skillsBody = h('div');
     const skillsGroup = group('Skills', skillsBody);
     const memoryBody = h('div');
@@ -895,7 +904,7 @@ const pages = {
     function showMemory(notes) {
       fill(memoryBody,
         notes.length
-          ? notes.map((n, i) => row(n.note, `Saved ${n.added || ''}`.trim(), h('button.btn', {
+          ? notes.map((n, i) => row(n.note, `${(n.kind || 'fact')[0].toUpperCase()}${(n.kind || 'fact').slice(1)} · saved ${n.added || ''}`.trim(), h('button.btn', {
             onclick: () => api.post('/api/vara/forget', { index: i }).then((r) => showMemory(r.memory), (e) => errorText(err, e.message)),
           }, 'Forget')))
           : h('p.prose', 'Nothing yet. Vara saves short notes when it learns something lasting, like your board, your printer or where your projects are.'),
@@ -904,12 +913,28 @@ const pages = {
         }, 'Forget everything')) : null);
     }
 
+    // ---- its name: what it's called on screen and the word it answers to ("Jarvis") ----
+    const nameInput = h('input.input', { placeholder: 'Vara', maxlength: 20, spellcheck: 'false', 'aria-label': 'Assistant name',
+      value: store.state.settings.assistantName || '' });
+    const nameNote = h('span.muted.small');
+    nameInput.addEventListener('change', () => {
+      const v = nameInput.value.trim();
+      if (v && !/^[A-Za-z]{2,20}$/.test(v)) { errorText(err, 'A name is one word of 2 to 20 letters.'); return; }
+      save({ assistantName: v }, err);
+      nameNote.textContent = v ? `It answers to “Hey ${v}” (with Vara Voice).` : 'Vara, answering to “Hey Vera”.';
+    });
+    nameNote.textContent = store.state.settings.assistantName ? `It answers to “Hey ${store.state.settings.assistantName}”.` : 'Vara, answering to “Hey Vera”.';
+    const nameGroup = group('Name',
+      row('Call it', 'Give your assistant a name of its own, like Jarvis. Pick a common word or name, so speech recognition knows it',
+        h('div.slider-wrap.wide', nameInput)),
+      h('p.prose.small', nameNote));
+
     // ---- Vara Voice: "Hey Vera", spoken answers, push to talk (Developer edition, or once installed) ----
     const voiceBody = h('div');
     const voiceGroup = group('Voice', voiceBody);
     const voiceNote = h('p.muted.small', { hidden: true });
     let voice = null;
-    const STATES = { off: 'Off', idle: 'Listening for “Hey Vera”', listening: 'Listening…', thinking: 'Working on it…', speaking: 'Speaking…' };
+    const STATES = { off: 'Off', idle: 'Listening for its name', listening: 'Listening…', thinking: 'Working on it…', speaking: 'Speaking…' };
     function showVoice() {
       const developer = store.state.settings.developerMode || store.state.settings.edition === 'developer';
       voiceGroup.hidden = !voice || (!voice.installed && !developer);
@@ -933,18 +958,30 @@ const pages = {
           h('div.btn-row', install, voiceNote));
         return;
       }
-      const state = STATES[voice.running ? (voice.state || 'idle') : 'off'] || voice.state;
+      const state = voice.running && (voice.state || 'idle') === 'idle' ? `Listening for “${voice.wakeWords}”`
+        : STATES[voice.running ? voice.state : 'off'] || voice.state;
+      const openMic = toggle(voice.openMic, (v) => {
+        if (v && !confirm('Always listening: everything said near this computer is written down and sent to your AI provider as a request. Turn it on?')) { openMic.set(false); return; }
+        save({ varaVoiceOpenMic: v }, err);
+      }, 'Always listening');
       fill(voiceBody,
         row('Vara Voice', voice.enabled ? state : 'Off', toggle(voice.enabled, (v) => save({ varaVoice: v }, err), 'Vara Voice')),
         row('Wake words', 'Start talking with “Hey Vera”. Off: only Win+Shift+V starts listening',
           toggle(voice.wake, (v) => save({ varaVoiceWake: v }, err), 'Wake words')),
         row('Speak answers', 'Off: answers show in the Vara chat without being read out',
           toggle(voice.speak, (v) => save({ varaVoiceSpeak: v }, err), 'Speak answers')),
+        row('Follow-ups', 'After an answer, keep listening for a few seconds, so the next question needs no name. “That’s all” ends it',
+          toggle(voice.followUp, (v) => save({ varaVoiceFollowUp: v }, err), 'Follow-ups')),
+        row('Always listening', 'Act on anything said, no name needed. Everything said nearby goes to your AI provider: use it alone, and with care',
+          openMic),
+        row('HUD', 'Open the full-screen HUD when it hears its name. Win+J opens it any time',
+          h('div.btn-row', toggle(voice.hud, (v) => save({ varaHud: v }, err), 'HUD'),
+            h('button.btn', { onclick: () => api.post('/api/hud', { open: true }).catch((x) => errorText(err, x.message)) }, 'Open'))),
         row('Push to talk', 'Press Win+Shift+V anywhere, or the microphone in the Vara chat', h('button.btn', {
           disabled: !voice.running, onclick: () => api.post('/api/vara/voice/listen', {}).catch((x) => errorText(err, x.message)),
         }, icon('mic'), 'Try it')),
-        h('p.prose.small', 'Try: “Hey Vera, what’s the weather tomorrow?”, “Hey Vera, open YouTube and play lofi music”, ',
-          '“Hey Vera, remind me at 5 to call Sam”. Say “stop” or “Vera, stop” to interrupt, and “yes” or “no” when Vara asks first.'));
+        h('p.prose.small', `Try: “${voice.wakeWords}, what’s the weather tomorrow?”, “${voice.wakeWords}, open YouTube and play lofi music”, `,
+          `“${voice.wakeWords}, remind me at 5 to call Sam”. Say “stop” to interrupt, and “yes” or “no” when it asks first.`));
     }
     const loadVoice = () => api.get('/api/vara/voice').then((v) => { voice = v; showVoice(); }, () => {});
     const offVoice = on('varaVoice', (e) => {
@@ -957,6 +994,51 @@ const pages = {
         ? 'Vara Voice is ready. Say “Hey Vera”.' : job.error || 'Vara Voice didn’t install.';
       if (job.state !== 'running') loadVoice();
     });
+
+    // ---- what it knows: the documents index ----
+    const docsBody = h('div');
+    const docsGroup = group('Files & documents', docsBody);
+    function showDocs(index) {
+      const on = store.state.settings.varaIndex !== false;
+      const when = index?.updated ? new Date(index.updated * 1000).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'not yet';
+      fill(docsBody,
+        row('Search my documents', 'Keeps a search index of Documents, Desktop, Downloads, Projects and the workspace (text, PDFs, Word and LibreOffice files, slides) on this computer only',
+          toggle(on, (v) => save({ varaIndex: v }, err), 'Search my documents')),
+        on ? row(`${index?.files ?? 0} files indexed`, `Updated ${when}; it refreshes every half hour, gently`, h('button.btn', {
+          onclick: () => api.post('/api/vara/index/rebuild', {}).then(() => setTimeout(loadAgent, 1500), (x) => errorText(err, x.message)),
+        }, 'Rebuild')) : null);
+    }
+
+    // ---- the expert helper: a second model for hard code (consult_expert) ----
+    const exEndpoint = h('input.input', { placeholder: 'https://api.anthropic.com', spellcheck: 'false', 'aria-label': 'Expert endpoint' });
+    const exModel = h('input.input', { placeholder: 'claude-opus-5', spellcheck: 'false', 'aria-label': 'Expert model' });
+    const exKey = h('input.input', { type: 'password', placeholder: 'Paste its API key', autocomplete: 'off', 'aria-label': 'Expert API key' });
+    const exNote = h('span.muted.small');
+    const exPresets = h('div.swatches', PRESETS.map((pr) => h('button.pill-btn', {
+      onclick: () => { exEndpoint.value = pr.endpoint; exModel.value = pr.model; exNote.textContent = pr.keyHint; },
+    }, pr.label)));
+    const saveExpert = async (off) => {
+      errorText(err, '');
+      try {
+        const c = await api.post('/api/vara/config', { expert: off ? { endpoint: '' } : {
+          endpoint: exEndpoint.value, model: exModel.value, provider: providerFor(exEndpoint.value), ...(exKey.value ? { key: exKey.value } : {}) } });
+        showExpert(c);
+        exNote.textContent = off ? 'Removed.' : 'Saved. Vara now asks it for help with hard code.';
+      } catch (x) { errorText(err, x.message); }
+    };
+    function showExpert(c) {
+      exEndpoint.value = c.expertEndpoint || '';
+      exModel.value = c.expertModel || '';
+      exKey.value = '';
+      exKey.placeholder = c.hasExpertKey ? 'Saved (type to replace)' : 'Paste its API key';
+    }
+    const expertGroup = group('Expert helper',
+      h('p.prose', 'A second AI model Vara asks when code gets hard: to write a tool, or to debug something stubborn. Claude is a good choice.'),
+      row('Provider', null, exPresets),
+      row('Endpoint', null, h('div.slider-wrap.wide', exEndpoint)),
+      row('Model', null, h('div.slider-wrap.wide', exModel)),
+      row('API key', 'Stored only on this computer', h('div.slider-wrap.wide', exKey)),
+      h('div.btn-row', h('button.btn.primary', { onclick: () => saveExpert(false) }, 'Save'), h('button.btn', { onclick: () => saveExpert(true) }, 'Remove'), exNote));
 
     // ---- reminders and routines ----
     const scheduleBody = h('div');
@@ -972,11 +1054,11 @@ const pages = {
     }
 
     function loadAgent() {
-      api.get('/api/vara/config').then((c) => { workspace.value = c.workspace; approval.set(c.approval); }, () => {});
+      api.get('/api/vara/config').then((c) => { workspace.value = c.workspace; approval.set(c.approval); showExpert(c); }, () => {});
       api.get('/api/vara/tools').then((t) => {
         const { installed, missing } = t.programs;
         fill(toolsBody,
-          h('p.prose', 'Vara reads and writes files, runs commands and git, measures 3D models and reads web pages',
+          h('p.prose', 'Vara reads and writes files, runs commands and git, searches and browses the web, controls your browser and music, searches your documents, measures 3D models',
             installed.length ? `, and uses ${installed.join(', ')} on this computer.` : '.'),
           missing.length ? row('Not installed', missing.join(', '), h('button.btn', {
             onclick: () => api.post('/api/open', { app: 'store' }).catch((e) => errorText(err, e.message)),
@@ -987,6 +1069,8 @@ const pages = {
             h('code', t.skillsFolder.replace(/^\/home\/[^/]+/, '~')), ', or ask Vara to save one after it works something out.'));
         showMemory(t.memory);
         showScheduled(t.scheduled || []);
+        showDocs(t.index);
+        showMade(t.made || []);
       }, (e) => errorText(err, e.message));
     }
 
@@ -999,12 +1083,16 @@ const pages = {
         row('Model', null, h('div.slider-wrap.wide', model)),
         row('API key', 'Stored only on this computer, readable only by you', h('div.slider-wrap.wide', key))),
       h('div.btn-row', saveBtn, testBtn, note),
+      nameGroup,
       voiceGroup,
       agentGroup,
       scheduleGroup,
-      toolsGroup,
-      skillsGroup,
       memoryGroup,
+      docsGroup,
+      toolsGroup,
+      madeGroup,
+      expertGroup,
+      skillsGroup,
       group('Privacy', h('p.prose',
         'Simple requests like “open Firefox” or “volume 40” are handled on this computer. Other messages, and what Vara ',
         'reads while working (files, command output), go to the endpoint above; with a cloud provider they leave this computer, ',

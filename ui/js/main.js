@@ -17,6 +17,7 @@ const surfaces = {
   store: () => import('./surfaces/store.js'),
   lock: () => import('./surfaces/lock.js'),
   camera: () => import('./surfaces/camera.js'),
+  hud: () => import('./surfaces/hud.js'),
 };
 
 async function resync() {

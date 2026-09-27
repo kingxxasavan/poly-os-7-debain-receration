@@ -89,6 +89,11 @@ DEFAULTS: dict = {
     "varaVoice": False,  # listen for "Hey Vera" and answer out loud (vara_voice.py)
     "varaVoiceWake": True,  # False: only the push-to-talk shortcut (Win+Shift+V) starts listening
     "varaVoiceSpeak": True,  # False: answers are shown, not spoken
+    "varaVoiceFollowUp": True,  # after an answer, a follow-up needs no name
+    "varaVoiceOpenMic": False,  # always listening: act on anything said, no name (opt-in)
+    "varaHud": True,  # the full-screen HUD opens when the assistant hears its name
+    "varaIndex": True,  # Vara keeps a local search index of the documents in your folders (vara_index.py)
+    "assistantName": "",  # what the assistant is called and answers to ("Jarvis"); "" = Vara ("Hey Vera")
 }
 POWER_MODES = ("saver", "balanced", "performance", "maximum")
 SCREEN_OFF_CHOICES = (0, 1, 2, 3, 5, 10, 15, 30, 60)
@@ -186,6 +191,12 @@ def _theme(value):
     raise ValueError("expected dark or light")
 
 
+def _assistant_name(value):
+    if isinstance(value, str) and (value == "" or re.fullmatch(r"[A-Za-z]{2,20}", value.strip())):
+        return value.strip()
+    raise ValueError("a name is one word of 2 to 20 letters")
+
+
 def _scale(value):
     if value in ("auto", "1", "2"):
         return value
@@ -218,6 +229,11 @@ VALIDATORS = {
     "varaVoice": _bool,
     "varaVoiceWake": _bool,
     "varaVoiceSpeak": _bool,
+    "varaVoiceFollowUp": _bool,
+    "varaVoiceOpenMic": _bool,
+    "varaHud": _bool,
+    "varaIndex": _bool,
+    "assistantName": _assistant_name,
     "lockNews": _bool,
     "cameraAccess": _bool,
     "micAccess": _bool,

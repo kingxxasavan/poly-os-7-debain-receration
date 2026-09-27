@@ -118,7 +118,7 @@ this step.
 | **Poly Account** | Optional, never required. Connect during setup or in Settings > Poly Account (sign in, create an account, or a 6-digit code entered at /link), or keep using PolyOS locally with no prompts. Connected computers show up at /account (Dashboard, Devices, Updates, Sync, Security, Privacy, Recovery, Notifications, Account); Poly Sync keeps settings the same; Remote management (restart, lock, install updates from the website) is off until switched on at the computer. Each computer has its own revocable credential and never keeps the password |
 | **Trying it** | On the USB drive, *Try PolyOS first* clears the desktop; *Install PolyOS 7* in the dock and on the desktop goes back to the installer |
 | **Camera** | Photos and videos from the webcam (self-timer, mirror, switch camera), saved to Pictures › Camera. Only listed on computers with a camera |
-| **Vara** | AI agent for code, 3D and robots (see [Vara, the agent](#vara-the-agent)); simple requests ("open firefox", "volume 40", "turn wifi off") run right on the PC |
+| **Vara** | The assistant and AI agent (see [Vara, the agent](#vara-the-agent)): voice ("Hey Vera", or a name of your own like Jarvis), the full-screen HUD, the web, your browser, music, reminders and routines, your documents, code, 3D and robots; simple requests ("open firefox", "volume 40", "turn wifi off") run right on the PC |
 | **Login screen** | PolyOS 7 design over the blurred amethyst crystal: big stacked clock, date, *Performance: Optimal*, news and notification tiles, *Click to Enter Password*, then your name, "Enter your password", *Forgot Password* and *Next*. Falls back to the stock greeter if it can't start |
 | **Lock screen** | Same design; appears instantly (Win+L, the power menu, before sleep, when the screen turns off); unlocks with your password |
 | **Forgot password** | Settings > Account makes a recovery key if you want one (it isn't part of setup any more); with it you set a new password from the login or lock screen |
@@ -184,6 +184,44 @@ lasting notes (your board, printer, where projects live); Settings > Vara lists 
 NVIDIA (`meta/llama-3.3-70b-instruct` and the other models on build.nvidia.com), Claude (`claude-opus-5`
 through Anthropic's official Python library, with adaptive thinking), or any other OpenAI-compatible
 service with tool calling. Models without tool calling still chat.
+
+**Voice (Vara Voice).** Offered when setting up the Developer edition ("Would you like Vara?"), or
+installed any time from Settings > Vara > Voice (`polyos-admin vara-voice install`, about 150 MB into
+`/opt/polyos/vara-voice`). Say **"Hey Vera"**, or the name you give it in Settings > Vara > *Name*
+("Jarvis" answers to "Hey Jarvis"), then ask. Speech is recognized on the computer (Vosk, offline);
+nothing is sent until the name and a request are heard, and then only the words, as if typed. Answers
+are read out with Piper (espeak-ng as a fallback). **Follow-ups** need no name for a few seconds after
+an answer ("that's all" ends it); **Always listening** (opt-in, with a warning) acts on anything said.
+"Stop" interrupts at any time; "yes", "no" or "always" answers an approval. `Win+Shift+V` is push to
+talk. `polyos/vara_voice.py` runs as its own process, started by the shell to match the settings.
+
+**The HUD.** When it hears its name (or `Win+J`), the assistant's full-screen interface opens: a blue
+arc-reactor circle that turns and glows for listening, thinking and speaking, falling "matrix" glyphs,
+and live panels for the system (processor, memory, battery, network), what it knows (memories,
+preferences, indexed documents, tools), what it's doing (each step as it works) and what's scheduled.
+Type or talk; Esc closes it, and it steps aside by itself after a conversation.
+
+**Around the clock.** `set_reminder` and `schedule_routine` (vara_schedule.py): "remind me at 5 to
+call Sam", "every weekday at 8, summarize the news". The shell checks every 20 seconds; reminders are
+shown and spoken, routines run as requests of their own with their answers shown and spoken.
+
+**Knows you, and your files.** Memory notes have a kind (preference, fact, project, person, habit);
+Vara saves the preferences it notices, replaces outdated ones, follows them without being reminded,
+and `recall` searches all of them. It also sees which apps you use and when (only while activity
+history is on). `vara_index.py` keeps a local full-text index of Documents, Desktop, Downloads,
+Projects and the workspace (text, code, PDFs, Word and LibreOffice files, slides), refreshed gently
+every half hour; `search_documents` and `read_document` use it. Private folders stay out.
+
+**The web and your browser.** `web_search` and `research` (search, then read the top pages),
+`fetch_url` with `links` to follow a page's links, and `browser` drives the browser on screen (open,
+search, back, tabs, scroll, find, read the open page) with xdotool. `media` plays, pauses and skips
+music and videos through MPRIS.
+
+**The tool maker.** When a job keeps coming up, Vara writes itself a tool (`make_tool`: a small
+Python program in `~/.config/polyos/vara/tools/<name>/`), tests it (`test_tool`) until it passes, and
+then has it as `my_<name>`. Every run asks first like any program. For hard code it asks the
+**expert helper**, a second model set in Settings > Vara (Claude is a good choice), with
+`consult_expert`. Settings > Vara lists the tools it made, opens them in VS Code and deletes them.
 
 ## Build the live USB / installer ISO
 
@@ -263,6 +301,8 @@ settings. The live session changes nothing on the disk until you run the install
 | `Super+W` | Widgets |
 | `Ctrl+Shift+Esc` · `Ctrl+Alt+Delete` | Task Manager |
 | `Super+V` | Ask Vara |
+| `Super+Shift+V` | Talk to Vara (Vara Voice) |
+| `Super+J` | The assistant's HUD |
 | `Super+A` | Quick settings |
 | Power key | Power Options |
 | `Super+I` | Settings |

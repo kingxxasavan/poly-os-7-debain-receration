@@ -190,9 +190,14 @@ class Backend:
         }
 
     def note_launch(self, app_id: str) -> None:
-        """Remember an opened app for the Start menu's Recent list."""
+        """Remember an opened app for the Start menu's Recent list (and Vara's sense of your habits)."""
         if not self.settings.get("keepRecent"):
             return
+        try:
+            name = next((a["name"] for a in self.apps() if a["id"] == app_id), app_id.removesuffix(".desktop"))
+            self.vara.habits.opened(name)
+        except (OSError, KeyError, ValueError):
+            pass
         recent = [a for a in self.settings.get("recent") if a != app_id]
         try:
             self.update_settings({"recent": [app_id, *recent][:RECENT_LIMIT]})
@@ -1049,12 +1054,21 @@ class Backend:
         if system.have("notify-send"):
             system.spawn(["notify-send", "-a", "PolyOS", "-i", "polyos", title, body])
 
+    def assistant_names(self) -> dict:
+        """What the assistant is called on screen ("Vara", or "Jarvis") and the word it answers to."""
+        from . import vara_voice
+        own = (self.settings.get("assistantName") or "").strip()
+        return {"display": own or "Vara", "wake": vara_voice.clean_name(own) if own else vara_voice.DEFAULT_NAME}
+
     def vara_voice_status(self) -> dict:
         from . import vara_voice
         proc = getattr(self, "_voice_proc", None)
+        names = self.assistant_names()
         return {"installed": self._voice_installed(), "enabled": bool(self.settings.get("varaVoice")),
                 "wake": bool(self.settings.get("varaVoiceWake")), "speak": bool(self.settings.get("varaVoiceSpeak")),
-                "running": bool(proc is not None and proc.poll() is None), "wakeWords": "Hey Vera",
+                "followUp": bool(self.settings.get("varaVoiceFollowUp")), "openMic": bool(self.settings.get("varaVoiceOpenMic")),
+                "hud": bool(self.settings.get("varaHud")), "name": names["display"],
+                "running": bool(proc is not None and proc.poll() is None), "wakeWords": f"Hey {names['wake'].title()}",
                 **getattr(self, "_voice_state", {"state": "off", "text": ""}), "home": str(vara_voice.VOICE_HOME)}
 
     def _voice_installed(self) -> bool:
@@ -1068,13 +1082,16 @@ class Backend:
         before = getattr(self, "_voice_state", {}).get("state")
         self._voice_state = {"state": state, "text": text[:300]}
         self.bus.publish("varaVoice", **self._voice_state)
-        # "Hey Vera": show the Vara panel listening, unless a full-screen app (a game, a video) is in front
-        if state == "listening" and before != "listening" and not getattr(self, "_fullscreen_app", False) \
-                and (self._popup or {}).get("view") != "vara":
-            try:
-                self.popup_request("vara")
-            except ApiError:
-                pass
+        # "Hey Vera": the HUD (or the Vara panel) shows it listening, unless a full-screen app is in front
+        if state == "listening" and before != "listening" and not getattr(self, "_fullscreen_app", False):
+            if self.settings.get("varaHud"):
+                if not getattr(self, "_hud_open", False):
+                    self.hud(True)
+            elif (self._popup or {}).get("view") != "vara":
+                try:
+                    self.popup_request("vara")
+                except ApiError:
+                    pass
         return self._voice_state
 
     def vara_voice_listen(self) -> dict:
@@ -1095,9 +1112,11 @@ class Backend:
         """Start, stop or restart the voice process to match the settings (and bring it back if it quit)."""
         from . import vara_voice
         want = bool(self.settings.get("varaVoice")) and self._voice_installed() and not self._is_live()
-        args = [str(vara_voice.PYTHON), "-m", "polyos.vara_voice",
+        args = [str(vara_voice.PYTHON), "-m", "polyos.vara_voice", "--name", self.assistant_names()["wake"],
                 *([] if self.settings.get("varaVoiceSpeak") else ["--quiet"]),
-                *([] if self.settings.get("varaVoiceWake") else ["--no-wake"])]
+                *([] if self.settings.get("varaVoiceWake") else ["--no-wake"]),
+                *([] if self.settings.get("varaVoiceFollowUp") else ["--no-follow-up"]),
+                *(["--open-mic"] if self.settings.get("varaVoiceOpenMic") else [])]
         proc = getattr(self, "_voice_proc", None)
         running = proc is not None and proc.poll() is None
         if running and (not want or getattr(self, "_voice_args", None) != args):
@@ -1140,6 +1159,88 @@ class Backend:
             except OSError:
                 pass
 
+    def vara_tool_open(self, name: str) -> dict:
+        """A tool Vara made: its folder in VS Code (or Files)."""
+        from . import system, vara_toolmaker
+        folder = vara_toolmaker.tools_dir(self.vara.home) / name
+        if not vara_toolmaker.NAME.match(name) or not folder.is_dir():
+            raise ApiError("That tool doesn't exist.", 404)
+        if system.have("code"):
+            system.spawn(["code", str(folder)])
+        else:
+            self.open_path(str(folder))
+        return {"ok": True}
+
+    def vara_index_rebuild(self) -> dict:
+        self.vara.index.clear()
+        threading.Thread(target=lambda: self.vara.index.update(self.vara.index.roots([self.vara.workspace()]), budget=600,
+                                                                max_files=5000), daemon=True).start()
+        return self.vara.index.stats()
+
+    # ---- the HUD: the assistant's full-screen interface -------------------------------------------
+    def hud(self, show: bool) -> dict:
+        """Open or close the HUD (it opens by itself when the assistant hears its name, if Settings allows)."""
+        self._hud_open = bool(show)
+        self._show_hud(self._hud_open)
+        self.bus.publish("hud", open=self._hud_open)
+        return {"open": self._hud_open}
+
+    def _show_hud(self, show: bool) -> None:
+        pass  # the desktop shell puts a full-screen window up (shell.py)
+
+    def _cpu_percent(self) -> float | None:
+        """Busy share of the processor since the last call (from /proc/stat)."""
+        try:
+            fields = [int(x) for x in Path("/proc/stat").read_text().split("\n", 1)[0].split()[1:]]
+        except (OSError, ValueError):
+            return None
+        idle, total = fields[3] + (fields[4] if len(fields) > 4 else 0), sum(fields)
+        before = getattr(self, "_cpu_sample", None)
+        self._cpu_sample = (idle, total)
+        if not before or total == before[1]:
+            return None
+        return round(100 * (1 - (idle - before[0]) / (total - before[1])), 1)
+
+    def hud_data(self) -> dict:
+        """Everything the HUD shows, in one call (it polls every couple of seconds while open)."""
+        from .vara_tools import TOOLS, custom_tools
+        mem = None
+        try:
+            info = {}
+            for line in Path("/proc/meminfo").read_text().splitlines():
+                key, _, rest = line.partition(":")
+                if key in ("MemTotal", "MemAvailable"):
+                    info[key] = int(rest.split()[0])
+            mem = round(100 * (1 - info["MemAvailable"] / info["MemTotal"]), 1)
+        except (OSError, KeyError, ValueError, IndexError, ZeroDivisionError):
+            pass
+        try:
+            uptime = int(float(Path("/proc/uptime").read_text().split()[0]))
+        except (OSError, ValueError, IndexError):
+            uptime = None
+        try:
+            status = self.system_status()
+        except Exception:  # noqa: BLE001 - the HUD shows what it can
+            status = {}
+        state = self.vara.state()
+        history = state["history"]
+        last_user = next((h["content"] for h in reversed(history) if h["role"] == "user"), "")
+        last_reply = next((h["content"] for h in reversed(history) if h["role"] == "assistant" and not h.get("interim")), "")
+        notes = self.vara.memory.notes()
+        return {
+            "name": self.assistant_names()["display"], "wake": self.assistant_names()["wake"],
+            "cpu": self._cpu_percent(), "memory": mem, "uptime": uptime, "cores": os.cpu_count(),
+            "battery": status.get("battery"), "network": status.get("network"), "volume": status.get("volume"),
+            "voice": self.vara_voice_status(), "busy": state["busy"], "pending": state["pending"],
+            "steps": [{"title": h["title"], "status": h["status"], "icon": h.get("icon")}
+                      for h in history if h["role"] == "step"][-6:],
+            "you": last_user[:300], "reply": last_reply[:600],
+            "scheduled": self.vara.schedule.items()[:6],
+            "knowledge": {"notes": len(notes), "preferences": sum(1 for n in notes if n.get("kind") == "preference"),
+                          "documents": self.vara.index.stats()["files"],
+                          "tools": len(TOOLS) + len(custom_tools(self.vara.home)), "skills": len(self.vara.skills.list())},
+        }
+
     def vara_test(self) -> dict:
         reply = complete(self.vara.config.load(), [{"role": "user", "content": "Reply with just the word: ready"}], timeout=60)
         return {"ok": True, "reply": reply[:200]}
@@ -1147,10 +1248,13 @@ class Backend:
     def update_settings(self, patch: dict) -> dict:
         if isinstance(patch, dict) and patch.get("keepRecent") is False:
             patch = {**patch, "recent": []}  # turning activity history off forgets it too
+            self.vara.habits.clear()
+        if isinstance(patch, dict) and patch.get("varaIndex") is False:
+            self.vara.index.clear()  # turning document search off forgets the index too
         settings = self.settings.update(patch)
         self.bus.publish("settings", settings=settings)
         self._pa_push(patch)  # Poly Sync, when connected
-        if {"varaVoice", "varaVoiceWake", "varaVoiceSpeak"} & set(patch):
+        if {"varaVoice", "varaVoiceWake", "varaVoiceSpeak", "varaVoiceFollowUp", "varaVoiceOpenMic", "assistantName"} & set(patch):
             self.sync_vara_voice()
         return settings
 
