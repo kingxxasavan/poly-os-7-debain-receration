@@ -708,6 +708,7 @@ route('PUT', '/api/v1/sync', null, async ({ req, body }) => {
 // The update check: anyone can ask, with no account and nothing about the computer but its version.
 route('GET', '/api/v1/updates/check', null, async ({ url }) => releases.check({
   channel: url.searchParams.get('channel') || 'stable', version: url.searchParams.get('version') || '0.0.0',
+  edition: url.searchParams.get('edition') || '',
 }));
 
 // ---- the handler --------------------------------------------------------------------------------

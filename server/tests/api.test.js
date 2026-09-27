@@ -242,3 +242,30 @@ test('downloads and stable updates still work when GitHub’s API is busy', asyn
     globalThis.fetch = saved;
   }
 });
+
+test('edition releases go only to that edition', async () => {
+  const saved = globalThis.fetch;
+  const asset = (v, name) => ({ name, browser_download_url: `https://example.test/${v}/${name}`, size: 1 });
+  const rel = (v, prerelease) => ({ tag_name: `v${v}`, name: `PolyOS v${v}`, body: '', prerelease, draft: false,
+    assets: [asset(v, 'polyos-update.json'), asset(v, 'polyos-update.json.sig'), asset(v, `polyos-shell_${v}_all.deb`)] });
+  const list = [rel('9.4.0', true), rel('9.3.0', true), rel('9.2.0', false)]; // newest first
+  const editions = { '9.4.0': ['developer'], '9.3.0': [], '9.2.0': [] }; // 9.4.0: Developer only; 9.3.0: a beta
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    if (u.includes('/releases?')) return new Response(JSON.stringify(list));
+    if (u.includes('/releases/latest')) return new Response(JSON.stringify(list[2]));
+    const m = /example\.test\/([\d.]+)\/polyos-update\.json$/.exec(u);
+    if (m) return new Response(JSON.stringify({ version: m[1], editions: editions[m[1]] }));
+    return new Response('{}', { status: 404 });
+  };
+  try {
+    const fresh = await import(`../releases.js?editions=${Date.now()}`);
+    assert.equal((await fresh.check({ version: '9.0.0', edition: 'developer' })).version, '9.4.0');
+    assert.equal((await fresh.check({ version: '9.0.0', edition: 'regular' })).version, '9.2.0'); // not the beta, not 9.4.0
+    assert.equal((await fresh.check({ version: '9.0.0', edition: 'gaming', channel: 'beta' })).version, '9.3.0');
+    assert.equal((await fresh.check({ version: '9.0.0' })).version, '9.2.0'); // older PolyOS: everyone's releases
+    assert.equal((await fresh.check({ version: '9.4.0', edition: 'developer' })).update_available, false);
+  } finally {
+    globalThis.fetch = saved;
+  }
+});

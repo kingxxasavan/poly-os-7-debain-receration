@@ -30,13 +30,15 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-from . import __version__
+from . import __version__, __editions__
 
 SERVER = "https://poly-os-7.vercel.app"  # the website: downloads, updates, Poly Account
 RELEASES_REPO = "kingxxasavan/poly-os-7-debain-receration"  # public release files (fallback when the website is down)
 MANIFEST = "polyos-update.json"
 SIGNATURE = "polyos-update.json.sig"
 CHANNELS = ("stable", "beta", "developer")
+EDITIONS = ("regular", "developer", "gaming")
+EDITION_PATH = Path("/etc/polyos/edition")  # written by the installer
 USER_AGENT = f"PolyOS/{__version__}"
 PACKAGE_FILE = re.compile(r"^(polyos-[a-z]+)_(\d+\.\d+\.\d+)_all\.deb$")
 CACHE = Path("/var/cache/polyos-update")
@@ -58,6 +60,36 @@ def server() -> str:
         except OSError:
             value = ""
     return (value or SERVER).rstrip("/")
+
+
+def local_edition(home_root: Path = Path("/home"), edition_path: Path | None = None) -> str:
+    """This computer's edition, for edition updates: Developer if anyone here uses the Developer edition
+    or developer mode, else Gaming if anyone uses it, else the one the installer wrote, else Regular."""
+    found = set()
+    try:
+        homes = [p for p in home_root.iterdir() if p.is_dir()]
+    except OSError:
+        homes = []
+    for home in homes + [Path.home()]:
+        try:
+            s = json.loads((home / ".config/polyos/settings.json").read_text("utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(s, dict):
+            if s.get("edition") in EDITIONS:
+                found.add(s["edition"])
+            if s.get("developerMode") is True:
+                found.add("developer")
+    for edition in ("developer", "gaming"):
+        if edition in found:
+            return edition
+    try:
+        written = (edition_path or EDITION_PATH).read_text("utf-8").strip()
+        if written in EDITIONS:
+            return written
+    except OSError:
+        pass
+    return "regular"
 
 
 def version_tuple(v: str) -> tuple[int, ...]:
@@ -118,10 +150,11 @@ def _base(url: str) -> str:
     return url.rsplit("/", 1)[0] + "/"
 
 
-def find(channel: str = "stable", get=_get) -> dict:
+def find(channel: str = "stable", get=_get, edition: str | None = None) -> dict:
     """{version, notes, published, manifest, signature}: from the update server, or the release files."""
     channel = channel if channel in CHANNELS else "stable"
-    query = urllib.parse.urlencode({"channel": channel, "version": __version__, "arch": os.uname().machine})
+    query = urllib.parse.urlencode({"channel": channel, "version": __version__, "arch": os.uname().machine,
+                                    "edition": edition or local_edition()})
     try:
         info = json.loads(get(f"{server()}/api/v1/updates/check?{query}"))
         if info.get("version"):
@@ -155,8 +188,8 @@ def validate_manifest(manifest: dict, base: str) -> list[dict]:
     return out
 
 
-def signed_manifest(found: dict, get=_get) -> tuple[dict, list[dict]]:
-    """The manifest, once its signature is checked, and its packages."""
+def signed_manifest(found: dict, get=_get, edition: str | None = None) -> tuple[dict, list[dict]]:
+    """The manifest, once its signature is checked, and its packages (only if it's for this edition)."""
     if not found.get("manifest"):
         raise ValueError("This release can only be installed from its ISO.")
     if not found.get("signature"):
@@ -173,29 +206,37 @@ def signed_manifest(found: dict, get=_get) -> tuple[dict, list[dict]]:
     manifest = json.loads(raw)
     if str(manifest.get("version")) != found["version"]:
         raise ValueError("This update’s package list is for a different version.")
+    editions = [e for e in manifest.get("editions") or [] if e in EDITIONS]
+    mine = edition or local_edition()
+    if editions and mine not in editions:  # signed, so this can't be faked by the server
+        raise ValueError(f"PolyOS {found['version']} is an update for the {' and '.join(e.title() for e in editions)} "
+                         f"edition only.")
     return manifest, validate_manifest(manifest, _base(found["manifest"]))
 
 
-def check(channel: str = "stable", get=_get) -> dict:
+def check(channel: str = "stable", get=_get, edition: str | None = None) -> dict:
     """{current, latest, available, notes, size, packages} for Settings > Updates."""
-    found = find(channel, get)
+    edition = edition or local_edition()
+    found = find(channel, get, edition)
     out = {"current": __version__, "latest": found["version"], "notes": found["notes"], "published": found["published"],
            "channel": channel, "available": False, "size": 0}
     if newer(found["version"]):
         try:
-            _manifest, packages = signed_manifest(found, get)
+            _manifest, packages = signed_manifest(found, get, edition)
             out.update(available=True, size=sum(p["size"] for p in packages), packages=[p["name"] for p in packages])
         except ValueError as exc:
             out["reason"] = str(exc)
     return out
 
 
-def download(emit, channel: str = "stable", get=_get, cache: Path = CACHE) -> tuple[str, list[Path]]:
+def download(emit, channel: str = "stable", get=_get, cache: Path = CACHE,
+             edition: str | None = None) -> tuple[str, list[Path]]:
     """(version, verified .deb files), for polyos-admin. Raises ValueError with a readable message."""
-    found = find(channel, get)
+    edition = edition or local_edition()
+    found = find(channel, get, edition)
     if not newer(found["version"]):
         raise ValueError("PolyOS is already up to date.")
-    _manifest, packages = signed_manifest(found, get)
+    _manifest, packages = signed_manifest(found, get, edition)
     cache.mkdir(parents=True, exist_ok=True)
     have = {p.name for p in cache.glob("*.deb")}
     for old in cache.glob("*.deb"):
@@ -217,8 +258,8 @@ def download(emit, channel: str = "stable", get=_get, cache: Path = CACHE) -> tu
     return found["version"], files
 
 
-def build_manifest(version: str, debs: list[Path], notes: str = "") -> dict:
-    """What the release workflow publishes as polyos-update.json."""
+def build_manifest(version: str, debs: list[Path], notes: str = "", editions=()) -> dict:
+    """What the release workflow publishes as polyos-update.json (editions: [] = everyone)."""
     items = []
     for deb in sorted(debs):
         m = PACKAGE_FILE.match(deb.name)
@@ -227,4 +268,4 @@ def build_manifest(version: str, debs: list[Path], notes: str = "") -> dict:
         items.append({"name": m.group(1), "file": deb.name, "size": deb.stat().st_size,
                       "sha256": hashlib.sha256(deb.read_bytes()).hexdigest()})
     return {"version": version, "published": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "notes": notes, "packages": items}
+            "notes": notes, "editions": [e for e in editions if e in EDITIONS], "packages": items}

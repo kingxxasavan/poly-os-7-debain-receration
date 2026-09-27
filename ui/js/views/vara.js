@@ -58,13 +58,23 @@ export default function vara(root) {
   }
   let voice = null;
   const title = h('b', 'Vara');
-  api.get('/api/vara/voice').then((v) => { voice = v; showVoice(v); title.textContent = v.name || 'Vara'; }, () => {});
+  const subtitle = h('small', 'Your PolyOS assistant: apps, code, 3D and robots');
+  // the HUD, voice and a name of its own: the Developer edition's (the server says whether they're on here)
+  const hudBtn = h('button.icon-btn.round', { title: 'Open the HUD (Win+J)', hidden: true,
+    onclick: () => { api.post('/api/hud', { open: true }).catch(() => {}); closePopup(); } }, icon('maximize'));
+  api.get('/api/vara/voice').then((v) => {
+    voice = v;
+    showVoice(v);
+    title.textContent = (v.available && v.name) || 'Vara';
+    hudBtn.hidden = !v.available;
+    if (v.available) subtitle.textContent = 'Your PolyOS assistant: voice, web, apps, code, 3D and robots';
+  }, () => {});
   root.append(
     h('header.va-head',
       h('img.va-logo', { src: '/img/vara.png', alt: '' }),
-      h('div.va-title', title, h('small', 'Your PolyOS assistant: voice, web, apps, code, 3D and robots')),
+      h('div.va-title', title, subtitle),
       stopBtn,
-      h('button.icon-btn.round', { title: 'Open the HUD (Win+J)', onclick: () => { api.post('/api/hud', { open: true }).catch(() => {}); closePopup(); } }, icon('maximize')),
+      hudBtn,
       h('button.icon-btn.round', { title: 'New chat', onclick: reset }, icon('refresh')),
       h('button.icon-btn.round', { title: 'Vara settings', onclick: () => { openSettings('vara'); closePopup(); } }, icon('settings'))),
     voiceBar,

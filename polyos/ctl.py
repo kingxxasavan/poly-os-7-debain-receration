@@ -103,7 +103,10 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "popup":
             call("POST", "/api/popup", {"view": args.view})
         elif args.command == "vara" and args.action == "hud":
-            call("POST", "/api/hud", {"open": True})
+            try:
+                call("POST", "/api/hud", {"open": True})
+            except SystemExit:  # not the Developer edition: the Vara chat instead
+                call("POST", "/api/popup", {"view": "vara"})
         elif args.command == "vara":
             try:
                 call("POST", "/api/vara/voice/listen", {})

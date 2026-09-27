@@ -37,7 +37,8 @@ from . import paths, vara_toolmaker
 from .core import ApiError
 from .vara_schedule import Schedule
 from .vara_skills import Habits, Memory, Skills, habit_summary
-from .vara_tools import READ, RUN, TOOLS, WRITE, ToolContext, ToolError, clip, inside, installed_programs
+from .vara_tools import (CLASSIC_TOOLS, READ, RUN, TOOLS, WRITE, ToolContext, ToolError, clip, developer, inside,
+                         installed_programs)
 
 # Vara talks to Ollama Cloud by default; each person adds their own API key (Settings > Vara
 # or first-run setup). OpenAI, NVIDIA and any other OpenAI-compatible service work the same way;
@@ -549,7 +550,10 @@ class Vara:
             f"- Open windows: {'; '.join(wins) if wins else 'none'}",
             f"- Installed: {', '.join(have) or 'nothing notable'}",
             f"- Not installed: {', '.join(missing) or 'nothing'}",
-            f"- Your tools: {', '.join(t.name for t in tools)}",
+            f"- Your tools: {', '.join(t.name for t in tools)}"
+            + ("" if developer(getattr(backend, "settings", None)) else " (the classic set: voice, the web browser, reminders "
+               "and routines, documents and making tools come with the Developer edition; if asked, say so, and that "
+               "developer mode in Settings › About turns them on)"),
             f"- Approval: {dict(ask='the person approves every change and command', workspace='file changes inside the workspace need no approval; commands do', auto='the person lets you act without asking')[cfg['approval']]}",
         ]
         if self.source == "voice":
@@ -616,8 +620,10 @@ class Vara:
         self._plan_item = None  # this request's plan (one card, updated in place)
         from .vara_tools import custom_tools
         ctx.expert = self.config.expert()
-        self._tools_now = {**{n: t for n, t in TOOLS.items() if t.available() and (n != "consult_expert" or ctx.expert)},
-                           **custom_tools(self.home)}
+        full = developer(settings)  # the Developer edition: every tool, and the ones Vara made
+        self._tools_now = {**{n: t for n, t in TOOLS.items() if t.available() and (full or n in CLASSIC_TOOLS)
+                              and (n != "consult_expert" or ctx.expert)},
+                           **(custom_tools(self.home) if full else {})}
         tools = list(self._tools_now.values())
         steps = GENTLE_STEPS if gentle else MAX_STEPS
         for _step in range(steps):
@@ -668,7 +674,8 @@ class Vara:
 
     def _call(self, ctx: ToolContext, call: dict) -> str:
         name = call["function"].get("name", "")
-        tool = getattr(self, "_tools_now", {}).get(name) or TOOLS.get(name)
+        now = getattr(self, "_tools_now", None)
+        tool = now.get(name) if now is not None else TOOLS.get(name)
         step = {"role": "step", "id": call.get("id") or uuid.uuid4().hex[:12], "tool": name,
                 "icon": tool.icon if tool else "tool", "title": name, "detail": "", "status": "running", "output": ""}
         if tool is None or not tool.available():
@@ -753,7 +760,7 @@ class Vara:
         while True:
             settings = getattr(backend, "settings", None)
             try:
-                if settings is None or settings.get("varaIndex") is not False:
+                if developer(settings) and settings.get("varaIndex") is not False:
                     gentle = bool(settings and settings.get("backgroundLimit") == "reduced")
                     self.index.update(self.index.roots([self.workspace()]), budget=30 if gentle else 90,
                                       max_files=150 if gentle else 400)
@@ -762,6 +769,8 @@ class Vara:
             time.sleep(every)
 
     def run_due(self, backend, wait_busy: float = 600) -> list[dict]:
+        if not developer(getattr(backend, "settings", None)):
+            return []  # reminders and routines are the Developer edition's; they wait for it
         due = self.schedule.due()
         for item in due:
             if item["kind"] == "reminder":

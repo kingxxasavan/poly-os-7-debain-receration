@@ -470,6 +470,7 @@ class AroundTheClockTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)
         self.backend = MockBackend(Settings(root / "settings.json"), EventBus(), home=root / "home")
+        self.backend.update_settings({"edition": "developer"})  # reminders and routines: the Developer edition's
         self.vara = self.backend.vara
         self.now = [1_800_000_000.0]
         self.vara.schedule.clock = lambda: self.now[0]
@@ -692,6 +693,7 @@ class ToolMakerTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)
         self.backend = MockBackend(Settings(root / "settings.json"), EventBus(), home=root / "home")
+        self.backend.update_settings({"edition": "developer"})
         self.vara = self.backend.vara
         self.home = self.backend.files.home
         self.vara.config.update(None, None, None, approval="auto")  # these tests aren't about approvals
@@ -756,12 +758,66 @@ class ToolMakerTests(unittest.TestCase):
         self.assertIsNone(self.vara.config.expert())
 
 
+class EditionTests(unittest.TestCase):
+    """Vara's 1.2 features are the Developer edition's (or developer mode's); other editions keep the classic Vara."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        root = Path(self.tmp.name)
+        self.backend = MockBackend(Settings(root / "settings.json"), EventBus(), home=root / "home")
+        self.vara = self.backend.vara
+        self.backend.update_settings({"edition": "regular", "developerMode": False})
+
+    def tearDown(self):
+        self.vara.stop()
+        self.vara.wait(5)
+        self.tmp.cleanup()
+
+    def tools_offered(self):
+        fake = FakeModel()
+        self.addCleanup(fake.close)
+        fake.replies = [{"content": "Hi."}]
+        self.vara.config.update(fake.url, "test-model", "sk-secret")
+        self.vara.chat(self.backend, "hello there, what can you do")
+        self.vara.wait(20)
+        return {t["function"]["name"] for t in fake.requests[0]["tools"]}, fake.requests[0]["messages"][0]["content"]
+
+    def test_regular_edition_has_the_classic_vara(self):
+        from polyos.vara_tools import CLASSIC_TOOLS
+        from polyos.core import ApiError
+
+        names, system = self.tools_offered()
+        self.assertTrue(names <= CLASSIC_TOOLS, names - CLASSIC_TOOLS)
+        self.assertIn("read_file", names)
+        self.assertIn("come with the Developer edition", system)
+        self.assertFalse(self.backend.vara_voice_status()["available"])
+        with self.assertRaises(ApiError):
+            self.backend.hud(True)
+        with self.assertRaises(ApiError):
+            self.backend.vara_voice_install()
+        import datetime
+
+        self.vara.schedule.add("reminder", "stretch", datetime.datetime.now() - datetime.timedelta(seconds=5))
+        self.assertEqual(self.vara.run_due(self.backend), [])  # waits for the Developer edition
+        self.assertEqual(len(self.vara.schedule.items()), 1)
+
+    def test_developer_mode_turns_them_on(self):
+        self.backend.update_settings({"developerMode": True})
+        names, system = self.tools_offered()
+        for name in ("web_search", "set_reminder", "make_tool", "plan", "search_documents"):
+            self.assertIn(name, names)
+        self.assertNotIn("come with the Developer edition", system)
+        self.assertTrue(self.backend.vara_voice_status()["available"])
+        self.assertTrue(self.backend.hud(True)["open"])
+
+
 class PlanAndPromptTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)
         self.backend = MockBackend(Settings(root / "settings.json"), EventBus(), home=root / "home")
         self.vara = self.backend.vara
+        self.backend.update_settings({"edition": "developer"})
 
     def tearDown(self):
         self.vara.stop()

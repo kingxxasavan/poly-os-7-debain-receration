@@ -862,6 +862,19 @@ const pages = {
         errorText(err, e.message);
       }
     });
+    // Vara's voice, name, HUD, reminders, documents, tool making and expert helper are the Developer edition's
+    // (or developer mode's, in Settings › About); every edition keeps the classic agent.
+    const developerVara = () => !!(store.state.settings.developerMode || store.state.settings.edition === 'developer');
+    const extrasNote = group('More with the Developer edition', h('p.prose',
+      'The Developer edition adds Vara Voice (“Hey Vera”, or a name of your own), the HUD, Vara’s own web browser, ',
+      'reminders and routines, searching your documents, tools Vara makes for itself, and an expert helper for hard code. ',
+      'Turn on developer mode in Settings › About to use them.'));
+    function showExtras() {
+      const on = developerVara();
+      for (const g of [nameGroup, scheduleGroup, docsGroup, madeGroup, expertGroup]) g.hidden = !on;
+      extrasNote.hidden = on;
+      if (!on) voiceGroup.hidden = true;
+    }
     // ---- the agent: workspace, approvals, tools, skills, memory ----
     const agentNote = h('p.prose.small', { hidden: true });
     const workspace = h('input.input', { placeholder: '~/Projects', spellcheck: 'false', 'aria-label': 'Workspace folder' });
@@ -936,8 +949,7 @@ const pages = {
     let voice = null;
     const STATES = { off: 'Off', idle: 'Listening for its name', listening: 'Listening…', thinking: 'Working on it…', speaking: 'Speaking…' };
     function showVoice() {
-      const developer = store.state.settings.developerMode || store.state.settings.edition === 'developer';
-      voiceGroup.hidden = !voice || (!voice.installed && !developer);
+      voiceGroup.hidden = !voice || !developerVara();
       if (!voice) return;
       if (!voice.installed) {
         const install = h('button.btn.primary', 'Install Vara Voice');
@@ -1058,7 +1070,9 @@ const pages = {
       api.get('/api/vara/tools').then((t) => {
         const { installed, missing } = t.programs;
         fill(toolsBody,
-          h('p.prose', 'Vara reads and writes files, runs commands and git, searches and browses the web, controls your browser and music, searches your documents, measures 3D models',
+          h('p.prose', developerVara()
+            ? 'Vara reads and writes files, runs commands and git, searches and browses the web, controls your browser and music, searches your documents, measures 3D models'
+            : 'Vara reads and writes files, runs commands and git, opens apps, reads web pages, measures 3D models',
             installed.length ? `, and uses ${installed.join(', ')} on this computer.` : '.'),
           missing.length ? row('Not installed', missing.join(', '), h('button.btn', {
             onclick: () => api.post('/api/open', { app: 'store' }).catch((e) => errorText(err, e.message)),
@@ -1075,7 +1089,7 @@ const pages = {
     }
 
     page.append(
-      pageHead('Vara', 'Your PolyOS assistant: voice, the web, your apps, code, 3D models and robots, powered by the AI model you choose.'),
+      pageHead('Vara', 'Your PolyOS assistant for your apps, files, code, 3D models and robots, powered by the AI model you choose.'),
       err,
       group('Quick setup', row('Provider', 'Fills in the address and a model; then add your key from that service', presets)),
       group('Connection',
@@ -1093,6 +1107,7 @@ const pages = {
       madeGroup,
       expertGroup,
       skillsGroup,
+      extrasNote,
       group('Privacy', h('p.prose',
         'Simple requests like “open Firefox” or “volume 40” are handled on this computer. Other messages, and what Vara ',
         'reads while working (files, command output), go to the endpoint above; with a cloud provider they leave this computer, ',
@@ -1100,12 +1115,13 @@ const pages = {
         'Vara Voice recognizes speech on this computer and listens only for “Hey Vera” until you say it.')),
     );
     voiceGroup.hidden = true;
+    showExtras();
     load();
     loadAgent();
     loadVoice();
     return {
       close: () => { offVoice(); offVoiceJob(); },
-      update: (_s, changed) => { if (changed.has('settings')) loadVoice(); },
+      update: (_s, changed) => { if (changed.has('settings')) { showExtras(); loadVoice(); } },
     };
   },
 

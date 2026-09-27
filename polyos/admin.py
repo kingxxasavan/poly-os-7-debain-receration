@@ -61,6 +61,13 @@ def parse_apt_status(line: str) -> tuple[float, str] | None:
 
 
 _HOST = re.compile(r"(?:Could not resolve|Temporary failure resolving) '([^']+)'|Failed to fetch https?://([^/\s]+)")
+_BROKEN = re.compile(r"dpkg: error processing (?:package|archive) (\S+?)(?::\w+)? \(")
+UPDATE_LOG = Path("/var/log/polyos-update.log")
+
+
+def broken_packages(text: str) -> list[str]:
+    """The packages dpkg couldn't set up, from apt's output."""
+    return sorted({m.group(1) for m in _BROKEN.finditer(text)})
 
 
 def _apt_error(tail: list[str]) -> str:
@@ -78,6 +85,11 @@ def _apt_error(tail: list[str]) -> str:
     if host and ("Temporary failure resolving" in text or "Could not resolve" in text or "Could not connect" in text
                  or "Connection timed out" in text or "Network is unreachable" in text):
         return (f"Couldn't reach {host.group(1) or host.group(2)}. Check your internet connection and try again.")
+    broken = broken_packages(text)
+    if broken:  # the real problem, not "Sub-process /usr/bin/dpkg returned an error code (1)"
+        why = next((ln.strip() for ln in tail if "returned error exit status" in ln or "trying to overwrite" in ln), "")
+        return (f"{', '.join(broken)} couldn't finish setting up, so the installation stopped."
+                + (f" ({why})" if why else "") + f" Details: {UPDATE_LOG}")
     errors = [ln[2:].strip() for ln in tail if ln.startswith("E:")]
     return errors[-1] if errors else "The installation didn't finish."
 
@@ -87,19 +99,50 @@ def _have_package_lists() -> bool:
     return lists.is_dir() and any(lists.glob("*_Packages*"))
 
 
+def _log(lines: list[str]) -> None:
+    """apt's full output for the last failed installation, for diagnosis (/var/log/polyos-update.log)."""
+    try:
+        UPDATE_LOG.write_text("\n".join(lines[-400:]) + "\n", "utf-8")
+    except OSError:
+        pass
+
+
 def apt(args: list[str], start: float = 0.0) -> None:
     tail: list[str] = []
+    everything: list[str] = []
     proc = subprocess.Popen(["apt-get", "-y", *APT_OPTS, *args], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             text=True, env={**os.environ, **APT_ENV}, bufsize=1)
     for line in proc.stdout:
         line = line.rstrip()
+        everything = (everything + [line])[-400:]
         status = parse_apt_status(line)
         if status:
             emit({"progress": max(start, status[0]), "message": status[1]})
         elif line:
             tail = (tail + [line])[-60:]
     if proc.wait() != 0:
+        _log(["$ apt-get " + " ".join(args), *everything])
         raise AdminError(_apt_error(tail))
+
+
+def half_installed() -> list[str]:
+    """Packages dpkg left unfinished (unpacked, half-configured, waiting on triggers)."""
+    out = subprocess.run(["dpkg-query", "-W", "-f", "${db:Status-Abbrev} ${Package}\n"], capture_output=True, text=True,
+                         timeout=60).stdout
+    return sorted(line.split()[1] for line in out.splitlines()
+                  if len(line.split()) == 2 and line[:2] in ("iU", "iF", "iH", "iW", "iT"))
+
+
+def repair_packages() -> list[str]:
+    """Finish what an earlier installation left half done (a crash, a power cut, a package whose setup
+    failed), so it doesn't stop this one. Returns what's still broken."""
+    env = {**os.environ, **APT_ENV}
+    if half_installed():
+        emit({"log": "finishing half-installed packages: " + ", ".join(half_installed())})
+        subprocess.run(["dpkg", "--configure", "-a", "--force-confdef", "--force-confold"], capture_output=True,
+                       text=True, env=env, timeout=1800)
+    subprocess.run(["apt-get", "-y", *APT_OPTS, "-f", "install"], capture_output=True, text=True, env=env, timeout=1800)
+    return half_installed()
 
 
 def apt_update() -> None:
@@ -343,6 +386,7 @@ def update(what: str) -> None:
         auto_update("now")
     elif what == "system":
         apt_update()
+        repair_packages()
         apt(["full-upgrade"], start=0.1)
         emit({"progress": 1.0, "message": "Everything is up to date."})
     else:
@@ -352,7 +396,8 @@ def update(what: str) -> None:
 def auto_update(mode: str) -> None:
     """The update service's runs (from systemd: polyos-update*.service; see autoupdate.py)."""
     from . import autoupdate
-    service = autoupdate.Service(emit, install=lambda files: autoupdate.apt_install(files, apt), apt_update=apt_update)
+    service = autoupdate.Service(emit, install=lambda files: autoupdate.apt_install(files, apt, repair_packages),
+                                 apt_update=apt_update)
     try:
         status = service.run(mode)
     except ValueError as exc:

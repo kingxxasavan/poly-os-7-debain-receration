@@ -468,7 +468,8 @@ def cmd_deb(args) -> None:
         path = out / updates.MANIFEST
         notes_file = ROOT / "RELEASE_NOTES.md"  # shown in Settings › Updates before installing
         notes = notes_file.read_text("utf-8").strip() if notes_file.exists() else ""
-        data = (json.dumps(updates.build_manifest(VERSION, debs, notes), indent=2) + "\n").encode()
+        import polyos
+        data = (json.dumps(updates.build_manifest(VERSION, debs, notes, polyos.__editions__), indent=2) + "\n").encode()
         path.write_bytes(data)
         print(f"  wrote {path}")
         key = os.environ.get("POLYOS_UPDATE_KEY", "")

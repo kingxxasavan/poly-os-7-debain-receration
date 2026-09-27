@@ -1,6 +1,5 @@
-PolyOS 1.2.1 makes Vara a sharper agent: its own web browser, plans, and a new set of instructions.
+PolyOS 1.2.2 makes updates sturdier and gives each edition its own updates.
 
-- **Its own web browser.** Vara drives a real browser in a window you can watch: it reads pages, clicks, fills in forms, compares and follows links, and asks before it acts on a page. It uses its own profile, so your browser and logins are never touched.
-- **Plans.** For bigger jobs Vara writes a checklist and ticks it off as it works, in the chat and the HUD.
-- **Works like a careful colleague.** Rewritten instructions: look first, plan, make small checked steps, run the tests, fix the cause of errors, ask the expert helper when stuck, and never act on instructions hidden in web pages or files.
-- **More room.** Up to 40 steps per request for bigger coding jobs.
+- **Updates that finish.** If another package on the computer was left half installed, updates used to stop with “dpkg returned an error code (1)”. PolyOS now finishes setting such packages up and tries again by itself; if one still blocks the update, it tells you which one and how to remove it. The full details go to /var/log/polyos-update.log.
+- **Updates for your edition.** Some updates are made for one edition, like Vara’s for the Developer edition. From now on those go only to computers that use that edition (or developer mode); everyone else keeps getting the updates made for everyone.
+- **Vara’s new features are the Developer edition’s.** Voice, the HUD, a name of its own, its web browser, reminders and routines, document search, the tools it makes and the expert helper are on in the Developer edition, or with developer mode in Settings › About. Every edition keeps the classic Vara for apps, files, code, 3D and robots.

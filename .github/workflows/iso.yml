@@ -66,8 +66,12 @@ jobs:
         run: |
           version="v$(python3 -c 'import polyos; print(polyos.__version__)')"
           channel="$(python3 -c 'import polyos; print(polyos.__channel__)')"
+          editions="$(python3 -c 'import polyos; print(",".join(polyos.__editions__))')"
           prerelease=false
           [ "$channel" = "stable" ] || prerelease=true
+          # an edition release (e.g. Developer only) is a pre-release: the Download buttons and PolyOS
+          # before 1.2.2 skip it; newer PolyOS gets it only on computers of that edition
+          [ -z "$editions" ] || prerelease=true
           build=true publish=false tag=""
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             publish=true tag="$GITHUB_REF_NAME"
@@ -181,6 +185,8 @@ jobs:
       - name: Release notes
         run: |
           {
+            editions="$(python3 -c 'import polyos; print(" and ".join(e.title() for e in polyos.__editions__))')"
+            if [ -n "$editions" ]; then echo "**An update for the $editions edition only.** Other computers stay on the newest update for everyone."; echo; fi
             if [ -f RELEASE_NOTES.md ]; then cat RELEASE_NOTES.md; echo; fi
             echo '<!-- files -->'
             echo

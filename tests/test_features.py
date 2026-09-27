@@ -708,13 +708,17 @@ class OnlineUpdateTests(unittest.TestCase):
     def tearDown(self):
         self.updates.TRUSTED_KEYS = self.saved
 
-    def fake_get(self, version, data=b"deb-bytes", signed=True, sign_with=None, name=None, server_up=True, tamper=False):
+    def fake_get(self, version, data=b"deb-bytes", signed=True, sign_with=None, name=None, server_up=True, tamper=False,
+                 editions=None):
         import hashlib
 
         base = "https://example.test/rel/"
-        manifest = json.dumps({"version": version, "packages": [
+        body = {"version": version, "packages": [
             {"name": "polyos-shell", "file": name or f"polyos-shell_{version}_all.deb", "size": len(data),
-             "sha256": hashlib.sha256(b"deb-bytes").hexdigest()}]}).encode()
+             "sha256": hashlib.sha256(b"deb-bytes").hexdigest()}]}
+        if editions is not None:
+            body["editions"] = list(editions)
+        manifest = json.dumps(body).encode()
         sig = self.updates.sign(manifest, sign_with or self.private) if signed else None
         if tamper:
             manifest = manifest.replace(b"polyos-shell_", b"polyos-shell_")[:-1] + b" }"
@@ -793,6 +797,52 @@ class OnlineUpdateTests(unittest.TestCase):
             (Path(tmp) / "other.txt").write_text("y")
             m = self.updates.build_manifest("1.2.3", list(Path(tmp).iterdir()))
             self.assertEqual([p["file"] for p in m["packages"]], ["polyos-shell_1.2.3_all.deb"])
+
+    def test_edition_updates(self):
+        dev = self.fake_get("99.0.0", editions=["developer"])
+        result = self.updates.check(get=dev, edition="regular")
+        self.assertFalse(result["available"])
+        self.assertIn("Developer edition only", result["reason"])
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(ValueError):
+                self.updates.download(lambda _e: None, get=dev, cache=Path(tmp), edition="gaming")
+            self.assertEqual(self.updates.download(lambda _e: None, get=dev, cache=Path(tmp), edition="developer")[0], "99.0.0")
+        self.assertTrue(self.updates.check(get=self.fake_get("99.0.0", editions=[]), edition="gaming")["available"])
+        sent = []
+
+        def spy(url, **kw):
+            sent.append(url)
+            return dev(url, **kw)
+        self.updates.check(get=spy, edition="developer")
+        self.assertIn("edition=developer", sent[0])
+
+    def test_local_edition(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root, written = Path(tmp) / "home", Path(tmp) / "edition"
+            root.mkdir()
+
+            def person(name, settings):
+                folder = root / name / ".config/polyos"
+                folder.mkdir(parents=True, exist_ok=True)
+                (folder / "settings.json").write_text(json.dumps(settings))
+            with mock.patch.object(Path, "home", return_value=Path(tmp) / "nobody"):
+                self.assertEqual(self.updates.local_edition(root, written), "regular")
+                written.write_text("gaming\n")
+                self.assertEqual(self.updates.local_edition(root, written), "gaming")
+                person("sam", {"edition": "regular"})
+                self.assertEqual(self.updates.local_edition(root, written), "gaming")  # the installer's choice
+                person("kai", {"edition": "regular", "developerMode": True})
+                self.assertEqual(self.updates.local_edition(root, written), "developer")
+                person("kai", {"edition": "developer"})
+                written.write_text("nonsense")
+                self.assertEqual(self.updates.local_edition(root, written), "developer")
+
+    def test_manifest_editions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            deb = Path(tmp) / "polyos-shell_1.2.3_all.deb"
+            deb.write_bytes(b"x")
+            self.assertEqual(self.updates.build_manifest("1.2.3", [deb], editions=("developer",))["editions"], ["developer"])
+            self.assertEqual(self.updates.build_manifest("1.2.3", [deb]).get("editions", []), [])
 
     def test_built_in_key_is_valid(self):
         import subprocess
@@ -1129,3 +1179,51 @@ class VaraVoiceInstallTests(unittest.TestCase):
             voice.assert_called_once()
             self.assertEqual(out["state"], "done")
             self.assertTrue(out["varaDone"])
+
+
+class BrokenPackageTests(unittest.TestCase):
+    """An update stopped by some other half-installed package: repaired and retried, or named."""
+
+    APT_TAIL = ["Setting up docker.io (26.1.5+dfsg1-9) ...",
+                "Job for docker.service failed because the control process exited with error code.",
+                "invoke-rc.d: initscript docker, action \"start\" failed.",
+                "dpkg: error processing package docker.io (--configure):",
+                " installed docker.io package post-installation script subprocess returned error exit status 1",
+                "Errors were encountered while processing:", " docker.io",
+                "E: Sub-process /usr/bin/dpkg returned an error code (1)"]
+
+    def test_the_real_reason_is_named(self):
+        message = admin._apt_error(self.APT_TAIL)
+        self.assertTrue(message.startswith("docker.io couldn't finish setting up"))
+        self.assertIn("post-installation script", message)
+        self.assertNotIn("error code (1)", message)
+        self.assertEqual(admin.broken_packages("dpkg: error processing package libfoo:amd64 (--configure):"), ["libfoo"])
+
+    def test_repaired_then_installed(self):
+        from polyos import autoupdate
+        calls = []
+        attempts = iter([admin.AdminError("docker.io couldn't finish"), None])
+
+        def apt(args, start=0.0):
+            calls.append(args[0])
+            err = next(attempts)
+            if err:
+                raise err
+        repairs = []
+        autoupdate.apt_install([Path("polyos-shell_1.2.2_all.deb")], apt, lambda: repairs.append(1) or [])
+        self.assertEqual((calls, len(repairs)), (["install", "install"], 2))
+
+    def test_still_broken_names_the_package(self):
+        from polyos import autoupdate
+
+        def apt(args, start=0.0):
+            raise admin.AdminError("docker.io couldn't finish")
+        with self.assertRaises(ValueError) as caught:
+            autoupdate.apt_install([Path("polyos-shell_1.2.2_all.deb")], apt, lambda: ["docker.io"])
+        self.assertIn("docker.io is only half installed", str(caught.exception))
+        self.assertIn("Settings › Apps", str(caught.exception))
+
+    def test_half_installed(self):
+        out = "ii  bash\niF  docker.io\niU  libfoo\nrc  oldpkg\nii  polyos-shell\n"
+        with mock.patch.object(admin.subprocess, "run", return_value=mock.Mock(stdout=out.replace("  ", " "))):
+            self.assertEqual(admin.half_installed(), ["docker.io", "libfoo"])

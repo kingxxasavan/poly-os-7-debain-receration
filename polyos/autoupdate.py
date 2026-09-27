@@ -188,8 +188,30 @@ class Service:
         return self.status
 
 
-def apt_install(files: list[Path], apt) -> None:
-    apt(["install", *[str(f) for f in files]], start=0.5)
+def apt_install(files: list[Path], apt, repair=None) -> None:
+    """Install the update's packages. Something another installation left half done is finished first;
+    if the install still fails, repair once more and retry, then say which package is the problem."""
+    args = ["install", *[str(f) for f in files]]
+    if repair is None:
+        apt(args, start=0.5)
+        return
+    repair()
+    try:
+        apt(args, start=0.5)
+        return
+    except Exception:  # noqa: BLE001 - one repair and retry, then the real reason
+        still = repair()
+        try:
+            apt(args, start=0.5)
+            return
+        except Exception as exc:
+            ours = {f.name.split("_", 1)[0] for f in files}
+            others = [p for p in still if p not in ours]
+            if others:
+                raise ValueError(f"The update is ready, but {', '.join(others)} is only half installed and stops every "
+                                   f"installation. Remove it in Settings › Apps (or: sudo apt-get remove {others[0]}), "
+                                   "then install the update again.") from None
+            raise exc
 
 
 def start_unit(kind: str) -> None:

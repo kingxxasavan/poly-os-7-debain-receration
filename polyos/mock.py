@@ -832,6 +832,8 @@ DP-1 disconnected (normal left inverted right x axis y axis)
         return getattr(self, "_voice_ok", False)
 
     def vara_voice_install(self):
+        if not self.vara_extras():
+            return super().vara_voice_install()  # refused: the Developer edition's
         if not self._admin_ready:
             raise NeedPassword()
 
@@ -847,7 +849,7 @@ DP-1 disconnected (normal left inverted right x axis y axis)
         return {**st, "running": st["installed"] and st["enabled"]}
 
     def sync_vara_voice(self):
-        on = self._voice_installed() and self.settings.get("varaVoice")
+        on = self._voice_installed() and self.settings.get("varaVoice") and self.vara_extras()
         self._voice_state = {"state": "idle" if on else "off", "text": ""}
         self.bus.publish("varaVoice", **self._voice_state)
 

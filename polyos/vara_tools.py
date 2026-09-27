@@ -1096,6 +1096,21 @@ def _short(text: str, n: int = 70) -> str:
     return text if len(text) <= n else text[:n - 1] + "…"
 
 
+# Vara's tools before 1.2, for every edition. The rest (the web, reminders and routines, documents,
+# making tools, the expert helper, plans) are the Developer edition's, as are voice and the HUD.
+CLASSIC_TOOLS = frozenset({"list_files", "read_file", "search_files", "write_file", "edit_file", "run_command", "git",
+                           "model_info", "openscad", "blender", "ros2", "arduino", "open", "list_windows", "fetch_url",
+                           "remember", "load_skill", "save_skill"})
+
+
+def developer(settings) -> bool:
+    """The Developer edition, or developer mode: Vara's 1.2 features (voice, the HUD, tools beyond the classic ones)."""
+    try:
+        return settings is not None and (settings.get("edition") == "developer" or settings.get("developerMode") is True)
+    except Exception:  # noqa: BLE001 - no settings: the classic Vara
+        return False
+
+
 TOOLS: dict[str, Tool] = {t.name: t for t in [
     Tool("plan", "Plan", "Write or update your plan for a task with more than two or three steps: the whole "
          "list each time, each step pending, in_progress or done. The person sees it as a checklist.",

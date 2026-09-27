@@ -92,10 +92,56 @@ async function stableFromManifest() {
     published: manifest.published || null, prerelease: false, assets };
 }
 
-// What /api/v1/updates/check answers: only what the updater needs, nothing about the asker.
-export async function check({ channel = 'stable', version = '0.0.0' } = {}) {
+// Which editions a release is for, from its signed manifest's "editions" ([] = everyone).
+// Edition releases (e.g. Developer-only) are published as GitHub pre-releases, so the website's
+// Download buttons and older PolyOS versions never see them.
+export const EDITIONS = ['regular', 'developer', 'gaming'];
+const manifests = new Map();
+async function releaseEditions(rel) {
+  const url = rel.assets['polyos-update.json']?.url;
+  if (!url) return [];
+  const hit = manifests.get(url);
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.editions;
+  let editions = [];
+  try {
+    const res = await fetch(url, { headers: { 'User-Agent': 'PolyOS-website' } });
+    if (res.ok) {
+      const m = await res.json();
+      editions = Array.isArray(m.editions) ? m.editions.filter((e) => EDITIONS.includes(e)) : [];
+    }
+  } catch { /* unknown: treat as everyone's */ }
+  manifests.set(url, { at: Date.now(), editions });
+  return editions;
+}
+
+// The newest release this computer should get: its channel's, and for its edition (or everyone's).
+async function latestFor(channel, edition) {
+  const list = (await github('/releases?per_page=20')).filter((r) => !r.draft).map(summarize);
+  for (const rel of list) {
+    const editions = await releaseEditions(rel);
+    const forMe = !editions.length || editions.includes(edition);
+    if (!forMe) continue;
+    if (channel === 'stable' && rel.prerelease && !editions.length) continue; // a beta, not an edition release
+    return rel;
+  }
+  throw Object.assign(new Error('No releases yet.'), { status: 404 });
+}
+
+// What /api/v1/updates/check answers: only what the updater needs, nothing about the asker. PolyOS
+// 1.2.2 and later say their edition; older versions don't, and get everyone's releases only.
+export async function check({ channel = 'stable', version = '0.0.0', edition = '' } = {}) {
   const wanted = CHANNELS.includes(channel) ? channel : 'stable';
-  const rel = await latest(wanted);
+  let rel;
+  if (EDITIONS.includes(edition)) {
+    try {
+      rel = await latestFor(wanted, edition);
+    } catch (err) {
+      if (wanted !== 'stable') throw err;
+      rel = await latest('stable'); // GitHub's API is busy: everyone's newest release still works
+    }
+  } else {
+    rel = await latest(wanted);
+  }
   const manifest = rel.assets['polyos-update.json'];
   const available = newer(rel.version, version);
   return {

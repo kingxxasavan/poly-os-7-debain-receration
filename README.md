@@ -154,6 +154,12 @@ until the job is done, then sums up. Each step shows in the chat as a card you c
 Tools for programs that aren't installed are left out; Vara says which PolyMarket app provides them
 (Blender, OpenSCAD, FreeCAD, KiCad, PrusaSlicer, Cura and the Arduino IDE are there).
 
+**Editions.** The tools above are Vara in every edition. Everything added in 1.2 (the web and its own
+browser, media, reminders and routines, documents, plans, tools it makes, the expert helper, Vara
+Voice, a name of its own and the HUD) is the Developer edition's: it's on when the edition is
+Developer or developer mode is on (Settings > About); `vara_tools.developer()` decides, and
+`CLASSIC_TOOLS` lists what every edition gets.
+
 **Approvals.** Settings > Vara > *Ask before changes*: **Always** (default), **Only outside the
 workspace** (edits inside `~/Projects` need no OK; commands still do) or **Never**. The approval card
 shows the exact command, script or file content, with *Allow*, *Always in this chat* and *Deny*; if the
@@ -412,6 +418,19 @@ PolyOS 0.9 and later only install signed updates, checked against `TRUSTED_KEYS`
 set the variable `RELEASES_REPO` to its name and the secret `RELEASES_TOKEN` to a token that can
 create releases there (and set the same `RELEASES_REPO` on Vercel). To change the release key,
 add the new public key to `TRUSTED_KEYS` one release before switching the secret.
+
+**Updates for one edition.** Set `__editions__ = ("developer",)` in `polyos/__init__.py` (next to
+`__version__`) to send a release only to Developer edition computers. The workflow writes the
+editions into the signed `polyos-update.json` and publishes the release as a GitHub pre-release;
+the update server offers it only to PolyOS 1.2.2 and later that report that edition (a computer is
+Developer if anyone on it uses the Developer edition or developer mode, see
+`updates.local_edition()`), and the computer refuses a manifest that isn't for its edition.
+Everyone else stays on the newest release for everyone. Leave it `()` for a release for everyone.
+
+**When an update fails** ("dpkg returned an error code (1)"): the whole apt output is in
+`/var/log/polyos-update.log`. Since 1.2.2 `polyos-admin` finishes half-installed packages
+(`dpkg --configure -a`, `apt-get -f install`) before and after a failed install, tries once more,
+and names a package that still blocks it.
 
 ## Credits and license
 

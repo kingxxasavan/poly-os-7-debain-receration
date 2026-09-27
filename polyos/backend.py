@@ -1060,11 +1060,16 @@ class Backend:
         own = (self.settings.get("assistantName") or "").strip()
         return {"display": own or "Vara", "wake": vara_voice.clean_name(own) if own else vara_voice.DEFAULT_NAME}
 
+    def vara_extras(self) -> bool:
+        """Vara's 1.2 features (voice, the HUD, the web, reminders, documents, tool making): the Developer edition's."""
+        from .vara_tools import developer
+        return developer(self.settings)
+
     def vara_voice_status(self) -> dict:
         from . import vara_voice
         proc = getattr(self, "_voice_proc", None)
         names = self.assistant_names()
-        return {"installed": self._voice_installed(), "enabled": bool(self.settings.get("varaVoice")),
+        return {"available": self.vara_extras(), "installed": self._voice_installed(), "enabled": bool(self.settings.get("varaVoice")),
                 "wake": bool(self.settings.get("varaVoiceWake")), "speak": bool(self.settings.get("varaVoiceSpeak")),
                 "followUp": bool(self.settings.get("varaVoiceFollowUp")), "openMic": bool(self.settings.get("varaVoiceOpenMic")),
                 "hud": bool(self.settings.get("varaHud")), "name": names["display"],
@@ -1084,7 +1089,7 @@ class Backend:
         self.bus.publish("varaVoice", **self._voice_state)
         # "Hey Vera": the HUD (or the Vara panel) shows it listening, unless a full-screen app is in front
         if state == "listening" and before != "listening" and not getattr(self, "_fullscreen_app", False):
-            if self.settings.get("varaHud"):
+            if self.settings.get("varaHud") and self.vara_extras():
                 if not getattr(self, "_hud_open", False):
                     self.hud(True)
             elif (self._popup or {}).get("view") != "vara":
@@ -1102,6 +1107,9 @@ class Backend:
         return {"ok": True}
 
     def vara_voice_install(self) -> dict:
+        if not self.vara_extras():
+            raise ApiError("Vara Voice comes with the Developer edition. Turn on developer mode in Settings › About first.", 403)
+
         def done(job):
             if job["state"] == "done":
                 self.update_settings({"varaVoice": True})
@@ -1111,7 +1119,8 @@ class Backend:
     def sync_vara_voice(self) -> None:
         """Start, stop or restart the voice process to match the settings (and bring it back if it quit)."""
         from . import vara_voice
-        want = bool(self.settings.get("varaVoice")) and self._voice_installed() and not self._is_live()
+        want = (bool(self.settings.get("varaVoice")) and self.vara_extras() and self._voice_installed()
+                and not self._is_live())
         args = [str(vara_voice.PYTHON), "-m", "polyos.vara_voice", "--name", self.assistant_names()["wake"],
                 *([] if self.settings.get("varaVoiceSpeak") else ["--quiet"]),
                 *([] if self.settings.get("varaVoiceWake") else ["--no-wake"]),
@@ -1180,6 +1189,8 @@ class Backend:
     # ---- the HUD: the assistant's full-screen interface -------------------------------------------
     def hud(self, show: bool) -> dict:
         """Open or close the HUD (it opens by itself when the assistant hears its name, if Settings allows)."""
+        if show and not self.vara_extras():
+            raise ApiError("The HUD comes with the Developer edition. Turn on developer mode in Settings › About first.", 403)
         self._hud_open = bool(show)
         self._show_hud(self._hud_open)
         self.bus.publish("hud", open=self._hud_open)

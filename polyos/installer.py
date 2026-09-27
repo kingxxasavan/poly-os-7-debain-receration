@@ -1218,6 +1218,7 @@ class Installer:
         if self.windows_alongside:  # Windows keeps the hardware clock in local time
             write("etc/adjtime", "0.0 0 0.0\n0\nLOCAL\n")
         write("etc/default/locale", "LANG=en_US.UTF-8\n")
+        write("etc/polyos/edition", plan.get("edition", "regular") + "\n")  # for edition updates (updates.local_edition)
         # the USB drive's boot menu looks for this to offer "Start PolyOS 7 on this computer"
         write("boot/polyos-installed", f"PolyOS {__version__}\n")
         if not self.dry:
