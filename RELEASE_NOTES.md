@@ -1,5 +1,6 @@
-PolyOS 1.4.3 gives full-screen apps a way out.
+PolyOS 1.4.4 makes the Camera say what's wrong instead of showing a black screen.
 
-- **Leaving full screen.** Rest the pointer at the top (or bottom) edge of a full-screen app, like a video or a game, and a bar slides in with *Exit full screen*, *Minimize* and *Close*. Win+F and the app's own F11 or Esc still work too.
-- **Two screens.** An app full screen on one screen no longer hides the taskbar on the other.
-- From 1.4.2: setup scrolls properly, usernames like *admin* are caught on the account screen, *Your pictures* in Settings › Personalization sets your own wallpaper, and the dual-boot ISO is on the website's Download page.
+- **No camera?** The Camera app asks the system first and says so: no camera found, or (on newer Intel laptops) that the camera needs its driver from Settings › Drivers.
+- **Black picture?** If the camera opens but everything stays black, the Camera tries the next camera (many laptops have an infrared one for face sign-in), then tells you to open the privacy shutter or turn the camera on with its key (often F8 or Fn+F8). A dim room doesn't count as black.
+- **A camera that never answers** now gives a message after 10 seconds instead of waiting forever.
+- From 1.4.3: rest the pointer at the top of a full-screen app for Exit full screen, Minimize and Close.

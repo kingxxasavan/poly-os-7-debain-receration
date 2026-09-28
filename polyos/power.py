@@ -125,6 +125,22 @@ class IdleClock:
         return int(self._info.contents.idle)
 
 
+def has_ipu6(pci_root: Path = Path("/sys/bus/pci/devices")) -> bool:
+    """An Intel IPU6 laptop camera (MIPI): no picture until its driver is installed (Settings > Drivers)."""
+    from .drivers import IPU6_IDS
+    try:
+        devices = list(pci_root.iterdir())
+    except OSError:
+        return False
+    for dev in devices:
+        try:
+            if (dev / "vendor").read_text().strip() == "0x8086" and (dev / "device").read_text().strip()[2:] in IPU6_IDS:
+                return True
+        except OSError:
+            continue
+    return False
+
+
 def has_camera(sys_root: Path = Path("/sys/class/video4linux")) -> bool:
     """True when a webcam is connected (a V4L2 capture device, not a codec or metadata node)."""
     try:

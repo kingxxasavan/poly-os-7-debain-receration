@@ -666,7 +666,8 @@ class Backend:
 
     def camera_status(self) -> dict:
         folder = self.files.home / "Pictures" / "Camera"
-        return {"camera": self.has_camera(), "allowed": self.settings.get("cameraAccess"),
+        from .power import has_ipu6
+        return {"camera": self.has_camera(), "ipu6": has_ipu6(), "allowed": self.settings.get("cameraAccess"),
                 "micAllowed": self.settings.get("micAccess"), "folder": str(folder)}
 
     def camera_save(self, kind: str, ctype: str, data: bytes) -> dict:

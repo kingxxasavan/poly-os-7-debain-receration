@@ -42,8 +42,16 @@ export function mount(root, store) {
   const mirrorBtn = h('button.cam-tool.on', { title: 'Mirror preview' }, icon('flip'));
   const switchBtn = h('button.cam-tool', { title: 'Switch camera', hidden: true }, icon('swap'));
   const toast = h('div.cam-toast', { hidden: true });
+  const hint = h('div.cam-hint', { hidden: true, role: 'status' });
+  let ipu6 = false;
+  const IPU6_TEXT = 'This laptop’s camera (Intel IPU6) needs its driver before it shows a picture. Open Settings › Drivers and install the camera driver, then restart.';
+  // getUserMedia can wait forever on a camera that never answers
+  const answerIn = (promise, ms = 10000) => Promise.race([promise, new Promise((_, reject) => setTimeout(() => {
+    promise.then((s) => s.getTracks().forEach((t) => t.stop()), () => {}); // it answered after all: let go of it
+    reject(Object.assign(new Error('The camera didn’t answer. Unplug it and plug it back in, or restart, then try again.'), { name: 'TimeoutError' }));
+  }, ms))]);
   root.append(
-    h('div.cam-stage', video, flash, countdown, recTime, message),
+    h('div.cam-stage', video, flash, countdown, recTime, message, hint),
     h('div.cam-top', timerBtn, mirrorBtn, switchBtn),
     h('div.cam-bar', h('div.cam-modes', modeBtns), h('div.cam-center', shutter), h('div.cam-right', thumb)),
     toast,
@@ -95,17 +103,24 @@ export function mount(root, store) {
         h('button.btn.primary', { onclick: () => openSettings('privacy') }, 'Open privacy settings'));
     }
     if (!navigator.mediaDevices?.getUserMedia) return showMessage('This computer can’t show a camera here.');
+    // Ask the system first: with no camera at all, say so instead of showing a black picture
+    const status = await api.get('/api/camera').catch(() => null);
+    ipu6 = !!status?.ipu6;
+    if (status && !status.camera) {
+      return showMessage(ipu6 ? IPU6_TEXT : 'No camera was found. Connect one, or check that the laptop’s camera isn’t switched off '
+        + '(some laptops have a camera key, often F8 or Fn+F8, or a switch on the side).', h('button.btn', { onclick: start }, 'Try again'));
+    }
     const wantAudio = mode === 'video' && settings.micAccess;
     const deviceId = devices[deviceIdx]?.deviceId;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({
+      stream = await answerIn(navigator.mediaDevices.getUserMedia({
         video: { ...(deviceId ? { deviceId: { exact: deviceId } } : {}), width: { ideal: 1920 }, height: { ideal: 1080 } },
         audio: wantAudio,
-      });
+      }));
     } catch (err) {
-      if (wantAudio) { // no microphone: record video only
+      if (wantAudio && err.name !== 'TimeoutError') { // no microphone: record video only
         try {
-          stream = await navigator.mediaDevices.getUserMedia({ video: deviceId ? { deviceId: { exact: deviceId } } : true });
+          stream = await answerIn(navigator.mediaDevices.getUserMedia({ video: deviceId ? { deviceId: { exact: deviceId } } : true }));
         } catch (err2) {
           return showMessage(friendly(err2), h('button.btn', { onclick: start }, 'Try again'));
         }
@@ -120,6 +135,44 @@ export function mount(root, store) {
       devices = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput');
     } catch { devices = []; }
     switchBtn.hidden = devices.length < 2;
+    watchPicture(stream);
+  }
+
+  // A camera that opens but sends nothing, or only black: a closed privacy shutter, the camera key
+  // turned off, an infrared face camera picked instead of the normal one, or an IPU6 camera
+  // without its driver. Try the next camera once, then say what to check.
+  let tried = 0;
+  function watchPicture(current) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 32;
+    canvas.height = 18;
+    const ctx = canvas.getContext('2d');
+    let dark = 0;
+    const check = setInterval(() => {
+      if (stream !== current) return clearInterval(check);
+      let brightest = 0; // a closed shutter is black everywhere; a dim room still has something brighter
+      if (video.videoWidth) {
+        try {
+          ctx.drawImage(video, 0, 0, 32, 18);
+          const px = ctx.getImageData(0, 0, 32, 18).data;
+          for (let i = 0; i < px.length; i += 4) brightest = Math.max(brightest, px[i], px[i + 1], px[i + 2]);
+        } catch { brightest = 255; } // can't look: assume it's fine
+      }
+      dark = brightest < 16 ? dark + 1 : 0;
+      if (dark < 8) return; // about 4 seconds of black (or no picture at all)
+      clearInterval(check);
+      if (devices.length > 1 && tried < devices.length - 1) {
+        tried += 1;
+        deviceIdx = (deviceIdx + 1) % devices.length;
+        say('No picture from that camera. Trying the next one…');
+        restart();
+        return;
+      }
+      fill(hint, icon('info'), h('span', ipu6 ? IPU6_TEXT : 'The picture is black. Open the camera’s privacy shutter, or turn the camera on '
+        + 'with its key (often F8 or Fn+F8 on Lenovo laptops), then press Try again.'),
+      h('button.btn.small', { onclick: () => { hint.hidden = true; tried = 0; restart(); } }, 'Try again'));
+      hint.hidden = false;
+    }, 500);
   }
 
   function setMode(next) {
