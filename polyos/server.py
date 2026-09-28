@@ -122,6 +122,7 @@ GET_API = {
     "/api/state": lambda be, q: be.state(),
     "/api/wifi": lambda be, q: be.wifi_list(),
     "/api/wallpapers": lambda be, q: be.wallpapers(),
+    "/api/wallpapers/mine": lambda be, q: {"pictures": be.my_pictures()},
     "/api/sysinfo": lambda be, q: be.sysinfo(),
     "/api/files/places": lambda be, q: be.files.places() | {"trashCount": be.files.trash_count()},
     "/api/files/list": lambda be, q: (be.files.trash_list() if _q(q, "path") == "trash:///"

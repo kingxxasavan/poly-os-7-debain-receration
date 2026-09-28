@@ -255,6 +255,16 @@ class DryRunTests(unittest.TestCase):
         self.assertIn("efibootmgr -q -n 0004", joined)
 
 
+
+class ReservedUsersTests(unittest.TestCase):
+    def test_setup_screen_knows_the_same_names(self):
+        import re
+        from pathlib import Path
+        js = (Path(__file__).resolve().parent.parent / "ui/js/surfaces/setup.js").read_text()
+        block = re.search(r"const RESERVED_USERS = new Set\(\[(.*?)\]\);", js, re.S).group(1)
+        self.assertEqual(set(re.findall(r"'([^']+)'", block)), installer.RESERVED_USERS)
+
+
 if __name__ == "__main__":
     unittest.main()
 

@@ -157,7 +157,7 @@ page("download", "Download PolyOS 7", "Download the PolyOS 7 live USB and instal
           <p class="dl-which"><b>Which one?</b> Almost every Windows PC and laptop: <b>PC (Intel/AMD)</b>.
             Apple Silicon Macs (in UTM, Parallels or VMware Fusion) and ARM64 computers with UEFI: <b>ARM64</b>.</p>
           <p class="dl-fresh">{ico("info")}<span><b>A fresh install.</b> PolyOS installs on a whole drive and replaces everything on the drive you choose,
-            including Windows if it's there. Dual boot next to Windows isn't part of this download.</span></p>
+            including Windows if it's there.<br><b>Keeping Windows?</b> Get the <a href="/download/dualboot">dual-boot ISO</a> (PC, advanced): it installs PolyOS next to Windows. Back up your files and turn off BitLocker / Device encryption and Fast Startup in Windows first.</span></p>
           <p class="dl-note" data-release-note>Always the newest release. By downloading you accept the <a href="/disclaimer">disclaimer</a>.</p>
           <p class="dl-links"><a href="/download/checksums" data-release-sums>SHA256 checksums</a> · <a href="/install">Install guide</a> · <a href="/changelog">What's new</a></p>
         </div>
@@ -190,7 +190,8 @@ page("docs", "Documentation · PolyOS 7", "How to install, use and update PolyOS
         ("Install", '<p>The <a href="/install">install guide</a> covers making the USB drive, starting from it, and what to do if '
                     'something goes wrong.</p>'
                     '<p><b>A fresh install:</b> PolyOS installs on a whole drive and replaces everything on it, including Windows if it\'s '
-                    'there. Dual boot next to Windows isn\'t part of the download. After installing, PolyOS starts straight to your desktop.</p>'),
+                    'there. To keep Windows, use the <a href="/download/dualboot">dual-boot ISO</a> (advanced). After installing, PolyOS starts '
+                    'straight to your desktop.</p>'),
         ("First start", '<p>Setup happens once, on the USB drive, before PolyOS installs. It checks your computer first: the exact '
                         'model, processor, memory and graphics. Most computers get <b>Everything on</b>; older ones get <b>Smooth</b> or '
                         '<b>Light</b>, which turn off blur and see-through glass. Then your edition, Wi-Fi and, if you like, a '

@@ -65,26 +65,47 @@ function choose(label, options, onPick) {
   return Object.assign(el, { set: (v) => { el.value = String(v); } });
 }
 
-// Built-in wallpapers for a setting ("wallpaper" or "lockWallpaper"); browse adds any picture.
+// Built-in wallpapers for a setting ("wallpaper" or "lockWallpaper"), and "Your pictures": the
+// pictures in Pictures, Downloads, Desktop and Documents, picked right here (browse: any other
+// folder, through the file chooser).
 function wallGrid(store, key, err, browse) {
   const grid = h('div.wall-grid');
+  const mine = h('div.wall-mine', { hidden: true });
+  const wrap = h('div', grid, mine);
   const update = () => {
     const cur = store.state.settings[key];
     grid.querySelectorAll('.wall[data-id]').forEach((el) => el.classList.toggle('sel', el.dataset.id === cur));
     grid.querySelector('.wall-add')?.classList.toggle('sel', !cur.startsWith('builtin:'));
+    mine.querySelectorAll('.wall[data-path]').forEach((el) => el.classList.toggle('sel', el.dataset.path === cur));
   };
+  async function showMine() {
+    if (!mine.hidden) { mine.hidden = true; return; }
+    mine.hidden = false;
+    fill(mine, h('p.muted.small', 'Looking for your pictures…'));
+    let pics = [];
+    try { pics = (await api.get('/api/wallpapers/mine')).pictures; } catch (e) { errorText(err, e.message); }
+    const other = browse && !store.state.env.dev
+      ? h('button.btn', { onclick: () => api.post('/api/pick-wallpaper').catch((e) => errorText(err, e.message)) }, icon('folder'), 'Another folder…') : null;
+    fill(mine,
+      h('div.wall-mine-head', h('b', 'Your pictures'), other),
+      pics.length ? h('div.wall-grid', pics.map((pic) => h('button.wall', {
+        'data-path': pic.path, title: pic.name,
+        style: { backgroundImage: `url("${withToken(`/files/raw?path=${encodeURIComponent(pic.path)}&v=${pic.mtime}`)}")` },
+        onclick: () => save({ [key]: pic.path }, err),
+      }, h('span', pic.name))))
+        : h('p.muted.small', 'No pictures in Pictures, Downloads, Desktop or Documents yet. Save one there (in Chrome: right-click a picture › Save image as), '
+          + 'or right-click a picture in Files › Set as wallpaper.'));
+    update();
+  }
   api.get('/api/wallpapers').then((list) => {
     for (const w of list) {
       grid.append(h('button.wall', { 'data-id': w.id, title: w.name, style: { backgroundImage: `url("${withToken(w.url)}")` },
         onclick: () => save({ [key]: w.id }, err) }, h('span', w.name)));
     }
-    if (browse && !store.state.env.dev) {
-      grid.append(h('button.wall.wall-add', { onclick: () => api.post('/api/pick-wallpaper').catch((e) => errorText(err, e.message)) },
-        icon('plus'), h('span', 'Browse…')));
-    }
+    grid.append(h('button.wall.wall-add', { onclick: showMine }, icon('plus'), h('span', 'Your pictures')));
     update();
   }, (e) => errorText(err, e.message));
-  return Object.assign(grid, { update });
+  return Object.assign(wrap, { update });
 }
 
 // A list of apps (dock pins or desktop shortcuts) with remove buttons.
@@ -655,7 +676,7 @@ const pages = {
         h('p.prose', st.set
           ? 'You sign in and unlock with your PIN. Installing apps, updates and Terminal’s sudo still ask for your password. After 5 wrong PINs, the password is needed.'
           : 'Sign in and unlock with a short PIN (4 to 6 digits) instead of your password. Anything that changes the system still asks for your password.'),
-        row('Your password', 'To set or remove the PIN', h('div.slider-wrap.wide', pw)),
+        row('Your password', 'So only you can set or remove a PIN, not someone who finds your computer unlocked. No password yet? Set one below first.', h('div.slider-wrap.wide', pw)),
         row(st.set ? 'New PIN' : 'PIN', null, h('div.slider-wrap.wide', pin)),
         row('Confirm PIN', null, h('div.slider-wrap.wide', pin2)),
         h('div.btn-row', setBtn, removeBtn, h('span.muted.small.pin-note', pinNote))));

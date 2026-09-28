@@ -1418,6 +1418,36 @@ class Backend:
             return None
         return path
 
+    PICTURE_FOLDERS = (("Pictures", 3), ("Downloads", 1), ("Desktop", 1), ("Documents", 1))
+
+    def my_pictures(self, limit: int = 120) -> list[dict]:
+        """Pictures you could use as a wallpaper (Pictures, Downloads, Desktop, Documents), newest first."""
+        home = Path(self.files.home)
+        found: dict[str, dict] = {}
+
+        def walk(folder: Path, depth: int) -> None:
+            try:
+                entries = list(os.scandir(folder))
+            except OSError:
+                return
+            for e in entries:
+                if e.name.startswith("."):
+                    continue
+                try:
+                    if e.is_dir(follow_symlinks=False):
+                        if depth > 1:
+                            walk(Path(e.path), depth - 1)
+                    elif Path(e.name).suffix.lower() in IMAGE_TYPES and not e.name.lower().endswith(".svg"):
+                        st = e.stat()
+                        if 0 < st.st_size < 40_000_000:
+                            found[e.path] = {"path": e.path, "name": e.name, "mtime": int(st.st_mtime)}
+                except OSError:
+                    continue
+
+        for name, depth in self.PICTURE_FOLDERS:
+            walk(home / name, depth)
+        return sorted(found.values(), key=lambda x: -x["mtime"])[:limit]
+
     def wallpaper_path(self, key: str = "wallpaper") -> Path | None:
         value = self.settings.get(key)
         if value.startswith("builtin:"):

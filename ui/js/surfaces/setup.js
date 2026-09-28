@@ -65,10 +65,24 @@ function guessZone() {
   return tz && tz !== 'UTC' && tz !== 'Etc/UTC' ? tz : 'America/New_York';
 }
 
+// Names Linux or PolyOS already use for themselves (installer.RESERVED_USERS; tests keep them the same)
+const RESERVED_USERS = new Set([
+  'root', 'daemon', 'bin', 'sys', 'sync', 'games', 'man', 'lp', 'mail', 'news', 'uucp', 'proxy', 'www-data',
+  'backup', 'list', 'irc', 'nobody', 'messagebus', 'lightdm', 'polkitd', 'avahi', 'colord', 'pulse', 'rtkit',
+  'saned', 'sshd', 'systemd-network', 'systemd-resolve', 'systemd-timesync', 'tss', 'usbmux', 'polyos', 'admin',
+]);
+
 function usernameFrom(name) {
   const first = (name.trim().split(/\s+/)[0] || '').normalize('NFKD').replace(/[^\w]/g, '').toLowerCase().replace(/_/g, '');
   const clean = first.replace(/[^a-z0-9]/g, '').slice(0, 24);
-  return clean ? (/^[a-z]/.test(clean) ? clean : `u${clean}`) : '';
+  const user = clean ? (/^[a-z]/.test(clean) ? clean : `u${clean}`) : '';
+  return RESERVED_USERS.has(user) ? `${user}1` : user; // "Admin" signs in as admin1
+}
+
+function usernameProblem(username) {
+  if (!/^[a-z_][a-z0-9_-]{0,31}$/.test(username)) return 'Usernames start with a letter and use lowercase letters, numbers, - and _.';
+  if (RESERVED_USERS.has(username)) return `“${username}” is used by the system. Pick another username, like ${username}1.`;
+  return null;
 }
 
 export function mount(root, store) {
@@ -165,10 +179,13 @@ export function mount(root, store) {
     card.classList.add('enter');
     card.classList.toggle('light', live && plan.appearance.theme === 'light' && steps[step] === appearance);
     fill(card, ...steps[step](), h('img.su-seven', { src: '/img/seven.svg', alt: '' }));
+    // every step starts at its top (a long step, like the computer check on a small screen, was
+    // left scrolled down for the next one)
+    for (const el of [card, stage, root]) el.scrollTop = 0;
     const count = live ? installSteps.length - 1 : steps.length;
     fill(pills, ...Array.from({ length: count }, (_, i) => h('span', { class: i < step ? 'done' : i === step ? 'on' : '' })));
     pills.hidden = live && step >= count;
-    card.querySelector('[autofocus]')?.focus();
+    card.querySelector('[autofocus]')?.focus({ preventScroll: true });
   }
 
   const head = (title, sub) => [h('h1', title), sub ? h('p.su-sub', sub) : null];
@@ -279,7 +296,7 @@ export function mount(root, store) {
     zone.addEventListener('change', () => { plan.timezone = zone.value; });
     const nextBtn = next('Next', () => {
       const problem = !plan.user.fullName.trim() ? 'Enter your name.'
-        : !/^[a-z_][a-z0-9_-]{0,31}$/.test(plan.user.username) ? 'Usernames start with a letter and use lowercase letters, numbers, - and _.'
+        : usernameProblem(plan.user.username) ? usernameProblem(plan.user.username)
           : pass.value !== confirm.value ? 'The passwords don’t match.'
             : !/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(plan.hostname) ? 'Computer names use letters, numbers and hyphens.' : null;
       if (problem) {
@@ -323,8 +340,8 @@ export function mount(root, store) {
     zone.addEventListener('change', () => { plan.timezone = zone.value; });
     const field = (label, input, hint) => h('label.su-field', h('span', label), input, hint ? h('small', hint) : null);
     const nextBtn = next('Next', () => {
-      const problem = !/^[a-z_][a-z0-9_-]{0,31}$/.test(plan.user.username) ? 'Usernames start with a letter and use lowercase letters, numbers, - and _.'
-        : !/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(plan.hostname) ? 'Computer names use letters, numbers and hyphens.' : null;
+      const problem = usernameProblem(plan.user.username)
+        || (!/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(plan.hostname) ? 'Computer names use letters, numbers and hyphens.' : null);
       if (problem) { err.textContent = problem; err.hidden = false; return; }
       go(step + 1);
     }, { primary: true });

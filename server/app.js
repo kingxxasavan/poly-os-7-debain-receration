@@ -353,7 +353,7 @@ async function sourceforgeFile(project, path) {
   return direct;
 }
 route('GET', '/api/download/:what', null, async ({ params, res }) => {
-  const file = { pc: 'polyos-amd64.iso', arm64: 'polyos-arm64.iso', checksums: 'SHA256SUMS' }[params.what];
+  const file = { pc: 'polyos-amd64.iso', dualboot: 'polyos-amd64-dualboot.iso', arm64: 'polyos-arm64.iso', checksums: 'SHA256SUMS' }[params.what];
   if (!file && /^polyos-[a-z]+$/.test(params.what)) { // the update packages, e.g. /download/polyos-shell
     const rel = await releases.latest('stable');
     const name = Object.keys(rel.assets).find((n) => n.startsWith(`${params.what}_`) && n.endsWith('.deb'));
