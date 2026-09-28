@@ -102,6 +102,11 @@ class DesktopShell(Backend):
         self._dock_hidden = False  # auto-hide: slid off the bottom edge
         self._dock_timer = 0
         self._fullscreen_app = False  # an app is full screen on top: the taskbar steps aside
+        self._fs_covers_panel = False  # ... on the taskbar's screen
+        self._fs_window = None
+        self._fs_timer = 0
+        self._fs_dwell = 0
+        self._fs_bar = None  # Exit full screen / Minimize / Close, at the top or bottom edge
         self._idle = None
         self._idle_slept = False
         self._camera = power.has_camera()
@@ -316,20 +321,116 @@ class DesktopShell(Backend):
     def _sync_fullscreen(self) -> None:
         """Full-screen apps (the title bar's full-screen button, Win+F, videos, games, F11 in a
         browser) show only the app: no title bar, no taskbar, nothing popping up over it.
-        Win+F (or the app's own F11/Esc) leaves full screen."""
+        Resting the pointer at the top or bottom edge shows a bar with Exit full screen, Minimize
+        and Close (Win+F or the app's own F11/Esc work too). The taskbar only steps aside for an
+        app on its own screen: full screen on the other monitor leaves it where it is."""
         active = self.wscreen.get_active_window()
         full = bool(active is not None and active.is_fullscreen()
                     and active.get_class_group_name() != "PolyOS")
-        if full == self._fullscreen_app:
+        self._fs_window = active if full else None
+        covers_panel = full and self._on_panel_monitor(active)
+        if full == self._fullscreen_app and covers_panel == self._fs_covers_panel:
             return
         self._fullscreen_app = full
+        self._fs_covers_panel = covers_panel
         self._set_game_mode(full and self.settings.get("gameMode"))
-        if full:
+        if covers_panel:
             self.panel.hide()
         else:
             self.panel.show_all()
             self.panel.stick()
             self._place_panel()
+        if full and not self._fs_timer:
+            self._fs_dwell = 0
+            self._fs_timer = GLib.timeout_add(150, self._fullscreen_edges)
+        if not full:
+            self._hide_fs_bar()
+
+    def _on_panel_monitor(self, win) -> bool:
+        x, y, w, h = win.get_geometry()
+        g = self._geometry()
+        cx, cy = x + w // 2, y + h // 2
+        return g.x <= cx < g.x + g.width and g.y <= cy < g.y + g.height
+
+    def _fullscreen_edges(self) -> bool:
+        """While an app is full screen: the pointer resting at the top or bottom edge shows the bar."""
+        win = self._fs_window
+        if not self._fullscreen_app or win is None:
+            self._fs_timer = 0
+            self._hide_fs_bar()
+            return False
+        try:
+            gx, gy, gw, gh = win.get_geometry()
+        except Exception:  # noqa: BLE001 - the window closed
+            return True
+        pointer = Gdk.Display.get_default().get_default_seat().get_pointer()
+        _screen, px, py = pointer.get_position()
+        inside = gx <= px < gx + gw
+        edge = "top" if inside and gy <= py <= gy + 1 else "bottom" if inside and gy + gh - 2 <= py < gy + gh else None
+        bar = self._fs_bar
+        if bar is not None and bar.get_visible():
+            bx, by = bar.get_position()
+            bw, bh = bar.get_size()
+            if not (bx - 60 <= px < bx + bw + 60 and by - 40 <= py < by + bh + 40):
+                self._hide_fs_bar()
+            return True
+        self._fs_dwell = self._fs_dwell + 1 if edge else 0
+        if self._fs_dwell >= 2:  # about a third of a second at the edge
+            self._fs_dwell = 0
+            self._show_fs_bar(win, (gx, gy, gw, gh), edge)
+        return True
+
+    def _show_fs_bar(self, win, geometry, edge: str) -> None:
+        if self._fs_bar is None:
+            bar = Gtk.Window(type=Gtk.WindowType.POPUP)  # above everything, full-screen apps too
+            bar.set_name("polyos-fsbar")
+            visual = self.gdk_screen.get_rgba_visual()
+            if visual is not None and self.gdk_screen.is_composited():  # rounded corners, not black ones
+                bar.set_visual(visual)
+            box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+            box.set_border_width(8)
+            for label, icon_name, action in (("Exit full screen", "view-restore-symbolic", "exit"),
+                                             ("Minimize", "window-minimize-symbolic", "minimize"),
+                                             ("Close", "window-close-symbolic", "close")):
+                button = Gtk.Button.new_with_label(label)
+                button.set_image(Gtk.Image.new_from_icon_name(icon_name, Gtk.IconSize.BUTTON))
+                button.set_always_show_image(True)
+                button.connect("clicked", lambda _b, a=action: self._fs_bar_action(a))
+                box.pack_start(button, False, False, 0)
+            bar.add(box)
+            css = Gtk.CssProvider()
+            css.load_from_data(b"""
+                #polyos-fsbar { background: rgba(24, 24, 28, 0.94); border-radius: 16px; border: 1px solid rgba(255,255,255,0.14); }
+                #polyos-fsbar button { color: #fff; background: rgba(255,255,255,0.08); border: 0; border-radius: 10px;
+                                       padding: 6px 12px; box-shadow: none; text-shadow: none; }
+                #polyos-fsbar button:hover { background: rgba(255,255,255,0.18); }
+            """)
+            bar.get_style_context().add_provider(css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+            for child in box.get_children():
+                child.get_style_context().add_provider(css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+            self._fs_bar = bar
+        bar = self._fs_bar
+        bar.show_all()
+        gx, gy, gw, gh = geometry
+        bw, bh = bar.get_size()
+        bar.move(gx + (gw - bw) // 2, gy + 10 if edge == "top" else gy + gh - bh - 10)
+
+    def _hide_fs_bar(self) -> None:
+        if self._fs_bar is not None:
+            self._fs_bar.hide()
+
+    def _fs_bar_action(self, action: str) -> None:
+        win = self._fs_window
+        self._hide_fs_bar()
+        if win is None:
+            return
+        ts = self._x_time()
+        if action == "exit":
+            win.set_fullscreen(False)
+        elif action == "minimize":
+            win.minimize()
+        elif action == "close":
+            win.close(ts)
 
     # ---- Game Mode ------------------------------------------------------------------------------
     BACKGROUND_TASKS = ("tumblerd", "tracker-miner-fs-3", "tracker-extract-3", "baloo_file", "gvfsd-metadata",
