@@ -24,7 +24,7 @@ terminal-border: "0"
     left = 27%
     top = 49%
     width = 46%
-    height = 20%
+    height = 26%
     item_font = "Poppins Regular 16"
     selected_item_font = "Poppins Regular 16"
     item_color = "#cfcbe0"

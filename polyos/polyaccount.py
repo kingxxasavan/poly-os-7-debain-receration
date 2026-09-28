@@ -45,7 +45,7 @@ SYNC_KEYS = {
 BACKUP_SETTINGS = ("theme", "accent", "glass", "wallpaper", "lockWallpaper", "clock24h", "showSeconds", "desktopClock",
                    "desktopIcons", "desktopOpen", "pinned", "startPinned", "widgets", "taskbarStyle", "taskbarAlign",
                    "taskbarAutoHide", "taskbarWidgets", "taskbarDate", "scale", "nightLight", "powerMode", "screenOff",
-                   "sleepAfter", "lockOnSleep", "lockNews", "keepRecent", "cloudGaming", "gameMode", "displayMode")
+                   "sleepAfter", "lockOnSleep", "lockNews", "keepRecent", "cloudGaming", "gameMode", "displayMode", "browser")
 BACKUP_EVERY = 6 * 3600  # at most this often, and only when something changed
 EDITIONS = ("regular", "developer", "gaming")
 APP_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")

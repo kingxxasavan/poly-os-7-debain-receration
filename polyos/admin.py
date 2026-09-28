@@ -17,7 +17,8 @@
     polyos-admin update-policy JSON        Settings > Updates: automatic checks, downloads, installs, time, channel
     polyos-admin power-keys LID PLUGGED BUTTON   what closing the lid (on battery / plugged in) and the power button do
     polyos-admin clean-packages            Settings > Storage: delete apt's downloaded packages
-    polyos-admin restart-windows           start Windows next time only (grub-reboot), then restart
+    polyos-admin restart-windows           start Windows next time only (the firmware's BootNext), then restart
+    polyos-admin boot-menu show|hide       with Windows too: the PolyOS boot menu at every start, or only with Shift/Esc
     polyos-admin firmware                  install the firmware updates the computer's maker offers (fwupd, LVFS)
 
 Every command prints JSON lines: {"progress": 0..1, "message": "..."} while it works,
@@ -507,7 +508,23 @@ def windows_entry(grub_cfg: str) -> str | None:
     return m.group(1) if m else None
 
 
+def windows_boot_entry(efibootmgr_out: str) -> str | None:
+    """The firmware's own Windows Boot Manager entry (its Boot#### number)."""
+    return next((num for num, label in installer.efi_entries(efibootmgr_out).items()
+                 if label.lower() == "windows boot manager"), None)
+
+
 def restart_windows() -> None:
+    """Windows next time only. On UEFI computers the firmware starts Windows Boot Manager itself
+    (BootNext), exactly as if PolyOS weren't there, so BitLocker doesn't ask for its recovery key;
+    otherwise GRUB's Windows entry is picked for one start."""
+    if Path("/sys/firmware/efi").is_dir() and shutil.which("efibootmgr"):
+        out = subprocess.run(["efibootmgr"], capture_output=True, text=True, timeout=60).stdout
+        num = windows_boot_entry(out)
+        if num and subprocess.run(["efibootmgr", "-q", "-n", num], capture_output=True, timeout=60).returncode == 0:
+            emit({"progress": 1.0, "message": "Restarting into Windows…"})
+            subprocess.run(["systemctl", "reboot"], capture_output=True, timeout=60)
+            return
     try:
         entry = windows_entry(Path("/boot/grub/grub.cfg").read_text("utf-8", errors="replace"))
     except OSError:
@@ -519,6 +536,25 @@ def restart_windows() -> None:
         raise AdminError("Couldn't choose Windows for the next start.")
     emit({"progress": 1.0, "message": "Restarting into Windows…"})
     subprocess.run(["systemctl", "reboot"], capture_output=True, timeout=60)
+
+
+GRUB_DEFAULTS = Path("/etc/default/grub")
+
+
+def boot_menu(state: str) -> None:
+    """Show the boot menu at every start (with a countdown to PolyOS), or keep it hidden (Shift or Esc shows it)."""
+    if state not in ("show", "hide"):
+        raise AdminError("Choose show or hide.")
+    try:
+        text = GRUB_DEFAULTS.read_text("utf-8")
+    except OSError:
+        raise AdminError("This computer's boot menu isn't PolyOS's.") from None
+    GRUB_DEFAULTS.write_text(installer.grub_menu_lines(text, state == "show"))
+    emit({"progress": 0.3, "message": "Updating the boot menu…"})
+    proc = subprocess.run(["update-grub"], capture_output=True, text=True, timeout=600)
+    if proc.returncode != 0:
+        raise AdminError("Couldn't update the boot menu.")
+    emit({"progress": 1.0, "message": "Saved."})
 
 
 def firmware() -> None:
@@ -634,6 +670,8 @@ def main(argv: list[str] | None = None) -> int:
             clean_packages()
         elif cmd == "restart-windows":
             restart_windows()
+        elif cmd == "boot-menu" and len(rest) == 1:
+            boot_menu(rest[0])
         elif cmd == "firmware":
             firmware()
         elif cmd == "security" and len(rest) == 2:

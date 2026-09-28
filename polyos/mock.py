@@ -81,7 +81,7 @@ class MockBackend(Backend):
             ({"id": i, "name": DISPLAY_NAMES.get(i, n), "description": d, "categories": c.split(";"), "keywords": [],
               "icon": f"/icon/app/{i}", "hidden": app_hidden(i, MOCK_BASE)} for i, n, d, c in apps),
             key=lambda a: a["name"].casefold())
-        supersede_browsers(self._apps, MOCK_BASE)
+        supersede_browsers(self._apps, MOCK_BASE, self.settings.get("browser"))
         self._admin_ready = live  # the live USB's account needs no password; "polyos" unlocks the mock
         if live:
             self.show_install_app()
@@ -212,6 +212,16 @@ class MockBackend(Backend):
     def restart_to_windows(self):
         self.bus.publish("power", action="reboot")
         return {"ok": True}
+
+    def boot_menu(self):
+        return {"windows": True, "shown": getattr(self, "_boot_menu", True)}
+
+    def boot_menu_set(self, show):
+        if not self._admin_ready:
+            raise NeedPassword()
+        self._boot_menu = show
+        return self.jobs.start("boot-menu", "Changing the boot menu", [], target="boot-menu",
+                               runner=self._simulate(["Updating the boot menu…"], 1))
 
     # ---- Settings: lid and power button, usage, storage clean-up (simulated) ----------------------
     def power_keys(self):

@@ -225,6 +225,10 @@ class DesktopShell(Backend):
         self.desktop.resize(width, height)
         self.desktop.move(0, 0)
         self._place_panel()
+        if self.lock_window is not None and self.lock_window.get_visible():
+            # a screen plugged in (or back after sleep) while locked: the lock screen covers it too
+            self.lock_window.move(0, 0)
+            self.lock_window.resize(width, height)
         mons = self._read_monitors()
         if mons != getattr(self, "_last_monitors", None):
             self._last_monitors = mons
@@ -503,7 +507,7 @@ class DesktopShell(Backend):
             if icons[app_id] is None and isinstance(info.get_icon(), Gio.ThemedIcon):
                 themed_names[app_id] = list(info.get_icon().get_names())  # tried against PolyOS's own set
         apps.sort(key=lambda a: a["name"].casefold())
-        supersede_browsers(apps, base)
+        supersede_browsers(apps, base, self.settings.get("browser"))
 
         index: dict[str, str] = {}
         for pass_no in range(3):  # StartupWMClass beats desktop id beats executable name
@@ -616,7 +620,7 @@ class DesktopShell(Backend):
     def run_default(self, what: str):
         if what == "files":
             return self.open_app("files")
-        system.run_default(what)
+        system.run_default(what, self.settings.get("browser"))
 
     def open_path(self, path: str):
         p = self.files.resolve(path)
@@ -1329,6 +1333,14 @@ class DesktopShell(Backend):
             theme.switch_openbox(paths.runtime_dir() / "openbox-rc.xml", settings["theme"])
         if "showAllApps" in patch:
             self.bus.publish("apps", apps=self._apps)
+        if "browser" in patch:
+            def browser():
+                try:
+                    system.set_default_browser(settings["browser"])
+                except OSError as exc:
+                    log.warning("could not set the default browser: %s", exc)
+            threading.Thread(target=browser, daemon=True).start()
+            self._apps_changed()  # the chosen browser shows, the other steps aside
         if "nightLight" in patch:
             threading.Thread(target=self.apply_night_light, daemon=True).start()
         if "airplaneMode" in patch:

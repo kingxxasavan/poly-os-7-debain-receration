@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 
 from . import __version__, devmode, drivers, gaming, paths, security, startup, store
-from .core import DEFAULTS, IMAGE_TYPES, ApiError, EventBus, Settings, bundled_icon, letter_icon, log
+from .core import BROWSER_APPS, DEFAULTS, IMAGE_TYPES, ApiError, EventBus, Settings, bundled_icon, browser_pins, letter_icon, log
 from .files import FileSystem
 from .privileged import Jobs
 from .vara import Vara, complete
@@ -103,12 +103,19 @@ def app_hidden(app_id: str, base: set[str]) -> bool:
     return app_id in base and app_id not in BASE_SHOWN and not app_id.startswith("polyos-")
 
 
-def supersede_browsers(apps: list[dict], base: set[str]) -> None:
-    """Chrome is the browser: the image's Chromium (kept for cloud gaming) stays out of sight next to it."""
-    if any(a["id"] == "google-chrome.desktop" for a in apps):
-        for a in apps:
-            if a["id"] == "chromium.desktop" and a["id"] in base:
-                a["hidden"] = a["superseded"] = True
+def supersede_browsers(apps: list[dict], base: set[str], browser: str = "chrome") -> None:
+    """The browser you chose shows, and the others stay out of sight next to it: Chromium (kept for
+    cloud gaming) next to Chrome, and both next to Firefox once it's installed."""
+    ids = {a["id"] for a in apps}
+    if browser == "firefox" and "firefox-esr.desktop" in ids:
+        hide = {"google-chrome.desktop", "chromium.desktop"}
+    elif "google-chrome.desktop" in ids:
+        hide = {"chromium.desktop"}
+    else:
+        return
+    for a in apps:
+        if a["id"] in hide and (a["id"] in base or a["id"] == "google-chrome.desktop"):
+            a["hidden"] = a["superseded"] = True
 
 
 # Friendlier names for Debian's default apps.
@@ -238,6 +245,20 @@ class Backend:
             return windows_entry(Path("/boot/grub/grub.cfg").read_text("utf-8", errors="replace")) is not None
         except OSError:
             return False
+
+    def boot_menu(self) -> dict:
+        """With Windows too: is the PolyOS boot menu shown at every start (Settings › Power)?"""
+        from .installer import boot_menu_shown
+        try:
+            shown = boot_menu_shown(Path("/etc/default/grub").read_text("utf-8", errors="replace"))
+        except OSError:
+            shown = False
+        return {"windows": self.windows_installed(), "shown": shown}
+
+    def boot_menu_set(self, show: bool) -> dict:
+        if not self.windows_installed():
+            raise ApiError("Windows isn't on this computer's boot menu.", 404)
+        return self.jobs.start("boot-menu", "Changing the boot menu", ["boot-menu", "show" if show else "hide"], target="boot-menu")
 
     def restart_to_windows(self) -> dict:
         if not self.windows_installed():
@@ -1371,6 +1392,8 @@ class Backend:
         if isinstance(patch, dict) and patch.get("keepRecent") is False:
             patch = {**patch, "recent": []}  # turning activity history off forgets it too
             self._usage_path().unlink(missing_ok=True)
+        if isinstance(patch, dict) and patch.get("browser") in BROWSER_APPS and patch["browser"] != self.settings.get("browser"):
+            patch = {**browser_pins(self.settings.snapshot(), patch["browser"]), **patch}  # the new browser where the old one was
         settings = self.settings.update(patch)
         self.bus.publish("settings", settings=settings)
         self._pa_push(patch)  # Poly Sync, when connected

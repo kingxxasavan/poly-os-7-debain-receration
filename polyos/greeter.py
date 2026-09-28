@@ -31,7 +31,7 @@ except ValueError:
     gi.require_version("WebKit2", "4.0")
 from gi.repository import Gdk, GLib, Gtk, LightDM, WebKit2  # noqa: E402
 
-from . import __version__, paths, system  # noqa: E402
+from . import __version__, display, paths, system  # noqa: E402
 from .backend import DOCK_HEIGHT, DOCK_MARGIN, PANEL_HEIGHT, Backend  # noqa: E402
 from .core import ApiError, EventBus, Settings  # noqa: E402
 from .mainloop import on_main  # noqa: E402
@@ -153,7 +153,26 @@ class GreeterBackend(Backend):
         return {"ok": True}
 
 
+def mirror_screens() -> None:
+    """Every connected screen on, showing the same picture: nobody has signed in, so there are no
+    display settings to follow yet, and an HDMI screen or projector should show the login too."""
+    if not system.have("xrandr"):
+        return
+    rc, out = system.run(["xrandr", "--query"], 5)
+    if rc != 0:
+        return
+    cmd = display.layout_command(display.parse_xrandr(out), "duplicate", {}, display.still_on(out))
+    if cmd and len(display.parse_xrandr(out)) > 1:
+        rc, err = system.run(cmd, 15)
+        if rc != 0:
+            log.warning("couldn't mirror the screens: %s", err.strip()[-300:])
+
+
 def _setup_display() -> None:
+    try:
+        mirror_screens()
+    except Exception:  # noqa: BLE001 - the login screen must come up whatever the screens do
+        log.exception("screen setup failed")
     rc, out = system.run(["xrandr", "--query"], 5)
     scale = system.auto_scale(system.parse_xrandr_dpi(out) if rc == 0 else None)
     if scale > 1:
@@ -217,6 +236,15 @@ def main() -> int:
 
     layout()
     Gdk.Screen.get_default().connect("monitors-changed", layout)
+    plugged = {"now": display.connectors()}
+
+    def watch_screens():  # a screen plugged in at the login screen: mirror it too (X leaves it off)
+        now = display.connectors()
+        if now != plugged["now"]:
+            plugged["now"] = now
+            threading.Thread(target=mirror_screens, daemon=True).start()
+        return True
+    GLib.timeout_add_seconds(3, watch_screens)
     win.show_all()
 
     def grab_focus():  # there's no window manager on the login screen to give us focus

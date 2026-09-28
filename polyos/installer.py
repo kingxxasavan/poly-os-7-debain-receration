@@ -29,7 +29,8 @@ import time
 from pathlib import Path
 from typing import Callable
 
-from . import __version__, drivers, firststart, hwcheck, polyaccount, recovery, security
+from . import __version__, drivers, firststart, hwcheck, polyaccount, recovery, security, system
+from .core import DEFAULTS, browser_pins
 from .arch import EFI, debian_arch
 
 KiB, MiB, GiB = 1024, 1024 ** 2, 1024 ** 3
@@ -511,6 +512,11 @@ def validate_plan(plan: dict, existing_users: set[str] | None = None) -> dict:
     # Personalization screen, so this one's theme and accent win)
     restore = polyaccount.clean_backup(plan.get("restore")) if plan.get("restore") else None
     copied = {k: v for k, v in (restore or {}).get("settings", {}).items() if k not in ("theme", "accent")}
+    # The web browser: Google Chrome comes with PolyOS; Firefox downloads after the restart, once
+    # online, and takes Chrome's place on the taskbar, in Start and on the desktop
+    browser = "firefox" if plan.get("browser") == "firefox" else "chrome"
+    browser_look = {"browser": browser, **(browser_pins({**DEFAULTS, **copied}, browser) if browser == "firefox" else {})}
+    apps = [*(restore or {}).get("apps", []), *(["firefox"] if browser == "firefox" else [])]
     clean = {"mode": mode, "disk": disk, "hostname": hostname, "timezone": tz,
              "user": {"username": username, "fullName": full, "password": password, "recoveryKey": str(key)},
              "appearance": {"theme": theme, "accent": accent.lower()}, "edition": edition,
@@ -518,9 +524,9 @@ def validate_plan(plan: dict, existing_users: set[str] | None = None) -> dict:
              # desktop; the edition's apps and the drivers install by themselves once online.
              "extraSettings": {**copied, **look, "edition": edition, "developerMode": edition == "developer",
                                "showAllApps": False, "gameMode": edition == "gaming",
-                               "editionSetup": True},
+                               "editionSetup": True, **browser_look},
              "firstStart": firststart.clean_plan(plan.get("drivers") or [], edition if edition != "regular" else None,
-                                                 drivers.DRIVER_PACKAGE_RE, (restore or {}).get("apps"), polyaccount.APP_ID_RE),
+                                                 drivers.DRIVER_PACKAGE_RE, apps, polyaccount.APP_ID_RE),
              "polyAccount": poly_account_state(plan.get("polyAccount"))}
     if layout:
         clean.update(layout)
@@ -673,6 +679,23 @@ def alongside_layout(start: int, size_bytes: int, sector: int, label: str, need_
     root = _align_down(size_bytes // sector, align)
     out.append({"role": "root", "start": cursor, "size": root, "type": LINUX_GUID if label == "gpt" else "83"})
     return out
+
+
+BOOT_MENU_SECONDS = 10
+
+
+def grub_menu_lines(text: str, show: bool) -> str:
+    """/etc/default/grub with the boot menu shown (a countdown to PolyOS) or hidden (Shift or Esc shows it)."""
+    lines = [ln for ln in text.splitlines() if not re.match(r"^\s*GRUB_TIMEOUT(_STYLE)?=", ln)]
+    new = [f"GRUB_TIMEOUT={BOOT_MENU_SECONDS if show else 2}", f"GRUB_TIMEOUT_STYLE={'menu' if show else 'hidden'}"]
+    at = next((i + 1 for i, ln in enumerate(lines) if ln.startswith("GRUB_DEFAULT=")), len(lines))
+    lines[at:at] = new
+    return "\n".join(lines) + "\n"
+
+
+def boot_menu_shown(text: str) -> bool:
+    m = re.findall(r"^\s*GRUB_TIMEOUT_STYLE=\"?(\w+)", text, re.M)
+    return bool(m) and m[-1] == "menu"
 
 
 def efi_entries(text: str) -> dict[str, str]:
@@ -1378,6 +1401,8 @@ class Installer:
             except (OSError, ValueError):
                 pass
         self._write(f"{home}/.config/polyos/settings.json", json.dumps(settings, indent=2) + "\n")
+        if settings.get("browser") == "firefox" and not self.dry:  # links open in Firefox (Chrome until it's installed)
+            system.set_default_browser("firefox", TARGET / home)
         if self.plan.get("polyAccount"):  # connected during setup: this computer stays connected
             self._write(f"{home}/.config/polyos/poly-account.json", json.dumps(self.plan["polyAccount"], indent=2) + "\n")
             if not self.dry:
@@ -1409,11 +1434,12 @@ class Installer:
         dual = self.dual
         self._write("etc/default/grub",
                     "# Written by the PolyOS installer. Run update-grub after editing.\n"
-                    # straight to PolyOS; with Windows too, Shift or Esc shows the menu, and Start ›
-                    # Power › Restart to Windows picks it for one start (grub-reboot needs "saved")
+                    # PolyOS alone: straight to PolyOS (Shift or Esc shows the menu). With Windows or
+                    # another system too: the PolyOS boot menu (PolyOS, Windows, firmware settings) with a
+                    # countdown to PolyOS; Settings › Power can hide it. Start › Power › Restart to
+                    # Windows picks Windows for one start (grub-reboot needs "saved")
                     "GRUB_DEFAULT=saved\n"
-                    "GRUB_TIMEOUT=2\n"
-                    "GRUB_TIMEOUT_STYLE=hidden\n"
+                    + grub_menu_lines("", dual) +
                     'GRUB_DISTRIBUTOR="PolyOS"\n'
                     'GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"\n'
                     'GRUB_CMDLINE_LINUX=""\n'

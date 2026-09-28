@@ -842,6 +842,12 @@ a.pw-card:hover { background: rgba(72, 69, 86, 0.85); }
 
 /* ---- login / lock screen (LightDM greeter) --------------------------------------------- */
 .greeter { position: fixed; inset: 0; overflow: hidden; background: var(--bg); user-select: none; }
+/* the lock screen's other screens: the lock wallpaper, dimmed, and the PolyOS mark */
+.gr-others { position: fixed; inset: 0; z-index: 0; background: #000; pointer-events: none; }
+.greeter.kind-lock { z-index: 1; }
+.gr-other { position: absolute; overflow: hidden; display: grid; place-items: center; background: #000; }
+.gr-other > i { position: absolute; inset: -60px; background-size: cover; background-position: center; filter: blur(34px) brightness(0.55) saturate(1.1); }
+.gr-other > img { position: relative; width: 72px; height: 72px; opacity: 0.85; }
 .gr-wall {
   position: absolute; inset: -60px; background: center / cover no-repeat;
   filter: blur(22px) saturate(1.15); transform: scale(1.06);   /* PolyOS 7: the lock screen wallpaper is soft-focus */
@@ -1680,6 +1686,9 @@ html[data-surface="camera"] { background: #000; }
 .su-edition small { color: var(--su-text-2); font-size: 13.5px; line-height: 1.45; }
 .su-edition-ico { display: grid; place-items: center; width: 46px; height: 46px; margin-bottom: 6px; border-radius: 15px; background: var(--accent); color: #fff; font-size: 24px; }
 .su-edition-check { position: absolute; top: 14px; right: 14px; color: var(--accent-text); font-size: 20px; }
+.su-browsers { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 560px; }
+.su-browser-ico { display: grid; place-items: center; width: 52px; height: 52px; margin-bottom: 6px; border-radius: 16px; background: rgba(255, 255, 255, 0.1); }
+.su-browser-ico img { width: 38px; height: 38px; }
 @media (max-width: 860px) { .su-editions { grid-template-columns: 1fr; } }
 .su-drives { display: grid; gap: 12px; max-width: 720px; max-height: 42vh; overflow-y: auto; padding-right: 4px; }
 .su-drive { display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: 18px; background: var(--su-raised-2, rgba(255, 255, 255, 0.08)); }

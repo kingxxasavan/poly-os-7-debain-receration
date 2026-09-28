@@ -126,7 +126,7 @@ this step.
 | **Boot splash** | Spinning pinwheel (Plymouth) |
 | **Boot menu** | Installed PolyOS starts straight away, with no menu to wait on. With Windows too, hold Shift or press Esc while it starts for the menu, or use Start › Power › *Restart to Windows* (it picks Windows for that one start) |
 | **Quick settings** | Wi-Fi, Airplane mode, Energy saver, Night light (warmer colors) and Sound, brightness and volume, and the battery; power and Settings are in Start |
-| **USB boot menu** | PolyOS background, *Start PolyOS 7* and *Start PolyOS 7 (safe mode)*, starts by itself after 5 seconds |
+| **USB boot menu** | PolyOS background, *Start PolyOS 7*, *Start PolyOS 7 (safe mode)* and, when PolyOS is already installed, *Start PolyOS 7 on this computer*; the USB drive's PolyOS is the default, so installing again always works |
 | **App icons** | Real icons from the Papirus theme for installed apps, PolyMarket and the dev preview |
 
 ## Vara, the agent

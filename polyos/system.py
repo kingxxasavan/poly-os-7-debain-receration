@@ -417,18 +417,54 @@ def power(action: str) -> None:
     raise RuntimeError(last)
 
 
-def run_default(what: str) -> None:
+def run_default(what: str, browser: str = "chrome") -> None:
     home = str(Path.home())
     candidates = {
         "terminal": [["x-terminal-emulator"], ["xfce4-terminal"], ["xterm"]],
         "files": [["xdg-open", home], ["thunar", home]],
-        "browser": [["x-www-browser"], ["google-chrome"], ["chromium"], ["firefox-esr"], ["xdg-open", "https://www.debian.org"]],
+        "browser": ([["firefox-esr"]] if browser == "firefox" else [])
+        + [["x-www-browser"], ["google-chrome"], ["chromium"], ["firefox-esr"], ["xdg-open", "https://www.debian.org"]],
     }[what]
     for cmd in candidates:
         if have(cmd[0]):
             spawn(cmd)
             return
     raise RuntimeError(f"No {what} program is installed")
+
+
+WEB_TYPES = ("text/html", "x-scheme-handler/http", "x-scheme-handler/https", "x-scheme-handler/about", "application/xhtml+xml")
+BROWSER_ORDER = {"chrome": "google-chrome.desktop;chromium.desktop;firefox-esr.desktop;",
+                 "firefox": "firefox-esr.desktop;google-chrome.desktop;chromium.desktop;"}
+
+
+def set_default_browser(browser: str, home: Path | None = None) -> None:
+    """Links open in the browser you chose: its entries in ~/.config/mimeapps.list (the rest of the
+    file stays). The next browser in the list takes over while the chosen one isn't installed yet."""
+    path = (home or Path.home()) / ".config/mimeapps.list"
+    try:
+        lines = path.read_text("utf-8").splitlines()
+    except OSError:
+        lines = []
+    out, section, placed = [], None, False
+    web = [f"{t}={BROWSER_ORDER[browser]}" for t in WEB_TYPES]
+    for line in lines:
+        head = line.strip()
+        if head.startswith("[") and head.endswith("]"):
+            section = head
+            out.append(line)
+            if section == "[Default Applications]" and not placed:
+                out.extend(web)
+                placed = True
+            continue
+        if section == "[Default Applications]" and head.split("=", 1)[0] in WEB_TYPES:
+            continue  # replaced by the lines above
+        out.append(line)
+    if not placed:
+        out = ["[Default Applications]", *web, "", *out] if out else ["[Default Applications]", *web]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text("\n".join(out).rstrip("\n") + "\n", "utf-8")
+    os.replace(tmp, path)
 
 
 def run_command(command: str) -> None:

@@ -840,10 +840,11 @@ def cmd_branding(_args) -> None:
         draw.text((w // 2, 240), "for Debian", font=font("Medium", 15), fill=(215, 208, 240), anchor="mm")
         return img
 
-    # the menu: its entries sit in the dark panel
+    # the menu: its entries sit in the dark panel (four on the USB drive, up to five on a computer with
+    # Windows too: PolyOS, its advanced options, Windows, firmware settings)
     splash = title(base.copy())
     panel = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    ImageDraw.Draw(panel).rounded_rectangle((200, 292, 600, 414), 14, fill=(10, 8, 24, 170))
+    ImageDraw.Draw(panel).rounded_rectangle((200, 292, 600, 452), 14, fill=(10, 8, 24, 170))
     splash.alpha_composite(panel)
     splash.convert("RGB").save(out_boot / "splash.png", optimize=True)
     # after choosing an entry, while PolyOS loads (GRUB's full-screen text area shows this)

@@ -532,12 +532,29 @@ const pages = {
         k.hasLid ? row('When I close the lid (plugged in)', 'With another screen connected, closing the lid does nothing', pick('lidPlugged', 'When I close the lid plugged in')) : null,
         row('When I press the power button', null, pick('button', 'When I press the power button'))));
     }, () => {});
+    // with Windows too: the PolyOS boot menu (PolyOS, Windows, firmware settings) at every start
+    const bootBox = h('div');
+    api.get('/api/power/bootmenu').then((b) => {
+      if (!b.windows) return;
+      const sw = toggle(b.shown, async (v) => {
+        errorText(err, '');
+        try {
+          await withAdmin(() => api.post('/api/power/bootmenu', { show: v }),
+            { title: 'Boot menu', text: 'Enter your password to change the boot menu.' });
+          b.shown = v;
+        } catch (x) { sw.set(b.shown); if (!x.cancelled) errorText(err, x.message); }
+      }, 'Show the boot menu when the computer starts');
+      fill(bootBox, group('Starting up',
+        row('Show the boot menu', 'Pick PolyOS or Windows each time the computer starts. PolyOS starts after 10 seconds. '
+          + 'When it’s off, hold Shift while starting, or use Start › Power › Restart to Windows.', sw)));
+    }, () => {});
     page.append(
       pageHead('Power & Performance', 'Power modes, battery, the lid and power button, screen and sleep.'),
       err,
       battery,
       group('Power mode', modes, modeNote),
       keysBox,
+      bootBox,
       pcBox,
       timers,
       maxNote,
@@ -753,8 +770,26 @@ const pages = {
     return { update: (_st, changed) => changed.has('settings') && update(), close: () => { offSecurity(); offJob(); } };
   },
 
-  apps(page) {
+  apps(page, store) {
     const err = h('div.error-text', { hidden: true });
+    // The web browser: Chrome (Chromium on ARM) comes with PolyOS; Firefox installs the first time
+    const hasApp = (id) => store.state.apps.some((a) => a.id === id);
+    const browserSeg = seg('Web browser', [['chrome', hasApp('google-chrome.desktop') ? 'Google Chrome' : 'Chromium', 'globe'],
+      ['firefox', 'Firefox', 'globe']], pickBrowser);
+    async function pickBrowser(v) {
+      browserSeg.set(v);
+      if (v === 'firefox' && !hasApp('firefox-esr.desktop')) {
+        try {
+          await withAdmin(() => api.post('/api/store/install', { id: 'firefox' }),
+            { title: 'Install Firefox', text: 'Enter your password to install Firefox.' });
+        } catch (x) {
+          if (!x.cancelled) errorText(err, x.message);
+          return browserSeg.set(store.state.settings.browser);
+        }
+      }
+      save({ browser: v }, err);
+    }
+    browserSeg.set(store.state.settings.browser);
     const startupBox = h('div');
     const listBox = h('div.app-list');
     const search = h('input.input', { placeholder: 'Search apps', spellcheck: 'false', 'aria-label': 'Search apps' });
@@ -859,10 +894,18 @@ const pages = {
       fill(body, panels[v]);
       if (v === 'usage') api.get('/api/apps/usage').then(renderUsage, (x) => errorText(err, x.message));
     }
-    page.append(pageHead('Apps', 'Installed apps, what starts when you sign in, and how much you use each one.'), err, tabs, body);
+    page.append(pageHead('Apps', 'Installed apps, what starts when you sign in, and how much you use each one.'), err,
+      group('Web browser', row('Your browser', 'Opens your links and sits on the taskbar. Firefox downloads the first time you pick it.', browserSeg)),
+      tabs, body);
     show('installed');
     load();
-    return { update: (_st, changed) => changed.has('apps') && load(), close: offJobs };
+    return {
+      update: (_st, changed) => {
+        if (changed.has('settings')) browserSeg.set(store.state.settings.browser);
+        if (changed.has('apps')) load();
+      },
+      close: offJobs,
+    };
   },
 
   storage(page) {

@@ -49,6 +49,7 @@ DEFAULTS: dict = {
     "displays": {},  # each screen's resolution, refresh rate, orientation (display.py), applied at start
     "displayMode": "duplicate",  # with a second screen: "duplicate" | "extend" | "main" | "second" (Win+P)
     "desktopOpen": "double",  # "double" | "single": clicks to open a desktop shortcut
+    "browser": "chrome",  # "chrome" (Google Chrome, Chromium on ARM) | "firefox": the web browser you chose in setup
     # Google Chrome is the browser (Chromium on ARM computers, which Chrome isn't made for); only
     # installed apps show, so each computer shows the one it has
     "pinned": [
@@ -216,6 +217,7 @@ VALIDATORS = {
     "cloudGaming": _cloud,
     "displays": _displays,
     "desktopOpen": _choice("double", "single"),
+    "browser": _choice("chrome", "firefox"),
     "taskbarStyle": _choice("floating", "full"),
     "taskbarAlign": _choice("center", "left"),
     "taskbarAutoHide": _bool,
@@ -247,6 +249,23 @@ VALIDATORS = {
     "glass": _glass,
     "scale": _scale,
 }
+
+
+BROWSER_APPS = {"chrome": ("google-chrome.desktop", "chromium.desktop"), "firefox": ("firefox-esr.desktop",)}
+PIN_LISTS = ("pinned", "startPinned", "desktopIcons")
+
+
+def browser_pins(settings: dict, browser: str) -> dict:
+    """The taskbar, Start and desktop with the browser you chose, where the other one was."""
+    other = [a for b, ids in BROWSER_APPS.items() if b != browser for a in ids]
+    patch = {}
+    for key in PIN_LISTS:
+        pins = [a for a in settings.get(key) or [] if a not in BROWSER_APPS[browser]]
+        spot = next((i for i, a in enumerate(pins) if a in other), 0)
+        pins = [a for a in pins if a not in other]
+        pins[spot:spot] = list(BROWSER_APPS[browser])
+        patch[key] = pins
+    return patch
 
 
 class Settings:

@@ -89,6 +89,7 @@ export function mount(root, store) {
     wipe: {}, roles: {}, // custom mode: drive -> what it's erased for; partition -> ROLES key
     user: { fullName: '', username: '', password: '' },
     appearance: { theme: store.state.settings.theme || 'dark', accent: store.state.settings.accent },
+    browser: 'chrome',
   };
   let probe = null;        // disks from /api/install/probe (fetched while the person fills in the rest)
   let probeError = null;
@@ -149,7 +150,7 @@ export function mount(root, store) {
   // Everything is asked on the USB drive, before installing, so the installed PolyOS starts straight
   // to the desktop: drivers and edition apps install by themselves after the restart (firststart.py).
   // Poly Account comes before your account: signed in, your Poly Account can be how you sign in here too.
-  const installSteps = [start, check, terms, edition, connect, polyAccount, account, appearance, target, installing];
+  const installSteps = [start, check, terms, edition, browser, connect, polyAccount, account, appearance, target, installing];
   // Only for a PolyOS installed some other way (the advanced installer): the same questions, once.
   const welcomeSteps = [check, connect, polyAccount, drivers, editionApps, done];
   const steps = live ? installSteps : welcomeSteps;
@@ -225,6 +226,27 @@ export function mount(root, store) {
       h('div.su-editions', { role: 'radiogroup', 'aria-label': 'Edition' }, cards),
       plan.edition === 'regular' ? null : h('p.su-note', icon('info'),
         'Its apps download by themselves after installing, once you’re online.'),
+      nav(next()),
+    ];
+  }
+
+  // Google Chrome comes with PolyOS (Chromium on ARM computers, which Chrome isn't made for);
+  // Firefox downloads after installing, once online, and takes its place
+  function browser() {
+    const chrome = (store.state.apps || []).some((a) => a.id === 'google-chrome.desktop');
+    const choices = [
+      ['chrome', chrome ? 'Google Chrome' : 'Chromium', chrome ? 'From Google. Comes with PolyOS, ready right away.'
+        : 'The open-source Chrome. Comes with PolyOS, ready right away.', chrome ? 'google-chrome' : 'chromium'],
+      ['firefox', 'Firefox', 'From Mozilla. Private by default. Downloads after installing, once you’re online.', 'firefox-esr'],
+    ];
+    const cards = choices.map(([id, name, text, img]) => h('button.su-edition.su-browser', {
+      class: plan.browser === id ? 'on' : '', role: 'radio', 'aria-checked': String(plan.browser === id),
+      onclick: () => { plan.browser = id; go(step); },
+    }, h('span.su-browser-ico', h('img', { src: `/img/apps/${img}.svg`, alt: '' })), h('b', name), h('small', text),
+    plan.browser === id ? h('span.su-edition-check', icon('check')) : null));
+    return [
+      ...head('Pick your web browser', 'It opens your links and sits on the taskbar. You can install the other one from PolyMarket anytime.'),
+      h('div.su-editions.su-browsers', { role: 'radiogroup', 'aria-label': 'Web browser' }, cards),
       nav(next()),
     ];
   }
@@ -750,7 +772,7 @@ export function mount(root, store) {
 
   async function startInstall() {
     const payload = { mode: plan.mode, disk: plan.disk, hostname: plan.hostname, timezone: plan.timezone,
-      user: plan.user, appearance: plan.appearance, edition: plan.edition,
+      user: plan.user, appearance: plan.appearance, edition: plan.edition, browser: plan.browser,
       profile: profile || hardware?.profile || null, background: hardware?.background || null, drivers: recommended || [],
       ...(plan.mode === 'alongside' ? { size: plan.size } : {}),
       ...(plan.mode === 'custom' ? customLayout() : {}),

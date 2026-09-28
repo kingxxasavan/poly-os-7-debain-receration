@@ -2,9 +2,9 @@
 # The USB stick's boot menu, PolyOS style: the PolyOS 7 background and colors instead of Debian's
 # helmet, "Start PolyOS 7" entries with a purple bar on the one selected, and a 30-second countdown
 # that any key stops. After choosing, the menu gives way to "Starting PolyOS…" on the same picture
-# instead of a black box. With PolyOS already installed on the computer, the first entry starts that
-# one after 5 seconds, so a USB drive left plugged in doesn't lead back to the installer. Runs in
-# the ISO's folder just before the ISO is made.
+# instead of a black box. With PolyOS already installed on the computer, a last entry starts that one;
+# the USB drive's own PolyOS stays the default, so starting from it to install again always works.
+# Runs in the ISO's folder just before the ISO is made.
 set -e
 
 theme=boot/grub/live-theme
@@ -37,8 +37,17 @@ if [ -e /boot/grub/live-theme/boot.png ]; then
     background_image /boot/grub/live-theme/boot.png
 fi
 
-# PolyOS is already installed on this computer (the installer leaves /boot/polyos-installed): the
-# USB drive was left in, so start the installed PolyOS unless someone picks the USB entries.
+EOF
+fi
+
+# PolyOS is already installed on this computer (the installer leaves /boot/polyos-installed): offer
+# to start it, after the USB drive's own entries. Not the default: someone starting from the USB
+# drive wants the installer, and after installing the computer starts from its own drive anyway
+# (the installer puts PolyOS first in its boot order). grub.cfg reads config.cfg before its
+# entries, so this goes at the end of grub.cfg itself.
+if [ -f boot/grub/grub.cfg ]; then
+    cat >> boot/grub/grub.cfg <<'EOF'
+
 insmod part_gpt
 insmod part_msdos
 insmod ext2
@@ -47,8 +56,6 @@ if search --no-floppy --file --set=polyos_installed /boot/polyos-installed; then
         search --no-floppy --file --set=root /boot/polyos-installed
         configfile /boot/grub/grub.cfg
     }
-    set default=polyos-installed
-    set timeout=5
 fi
 EOF
 fi
@@ -61,7 +68,8 @@ if [ -f "$theme/theme.txt" ]; then
         cat "$theme/theme.txt"
     } > "$theme/theme.txt.new"
     mv "$theme/theme.txt.new" "$theme/theme.txt"
-    # the menu sits in the dark panel drawn on the background; the selected entry gets a purple bar
+    # the menu sits in the dark panel drawn on the background (tall enough for four entries, with
+    # "on this computer"); the selected entry gets a purple bar
     sed -i \
         -e 's/^\([[:space:]]*\)left = 10%$/\1left = 28%/' \
         -e 's/^\([[:space:]]*\)width = 80%$/\1width = 44%/' \
